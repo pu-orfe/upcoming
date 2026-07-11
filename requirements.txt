@@ -1,6 +1,6 @@
 requests
 ics
-tatsu>=4.2,<5.17  # pin to avoid broken 5.17.0 release (missing 'rich' dependency)
+tatsu>=5.24.0,<5.25  # pin to avoid broken 5.17.0 release (missing 'rich' dependency)
 pytest
 arrow
 beautifulsoup4
