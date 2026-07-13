@@ -162,7 +162,7 @@ jobs:
 
       - name: Upload JSON artifact
         if: steps.check_change.outputs.skip != 'true'
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: events-json
           path: ${{ env.OUTPUT_FILE || 'events.json' }}
