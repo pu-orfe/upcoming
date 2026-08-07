@@ -34,7 +34,6 @@ jobs:
     outputs:
       skip_generation: ${{ steps.check_change.outputs.skip }}
     env:
-      LEGACY_REPOSITORY: pu-shd/orfe-upcoming
       PAGES_CNAME: upcoming.orfe.princeton.edu
       ICS_URL: ${{ vars.ICS_URL }}
       REPO_VARIABLE: ${{ vars.REPO_VARIABLE }}
@@ -124,28 +123,6 @@ jobs:
           gh release create "$TAG" "$OUTPUT_ASSET" --title "$TITLE" --notes "$BODY" --latest
 
           echo "Canonical asset URL: https://github.com/${GITHUB_REPOSITORY}/releases/download/${TAG}/${OUTPUT_ASSET}" >> "$GITHUB_STEP_SUMMARY"
-
-      # Best effort: the legacy mirror is for migrating consumers only, so a
-      # failure here must not stop the canonical Pages deploy.
-      - name: Mirror to legacy repository
-        if: steps.check_change.outputs.skip != 'true'
-        continue-on-error: true
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          TARGET_GITHUB_TOKEN: ${{ secrets.LEGACY_REPOSITORY_TOKEN }}
-        run: |
-          set -euo pipefail
-          OUTPUT_ASSET="${OUTPUT_FILE:-events.json}"
-          python -m src.mirror_release \
-            --target-repo "${LEGACY_REPOSITORY}" \
-            --target-commitish main \
-            --tag latest \
-            --title "Latest Events" \
-            --notes "Automated update of events feed. ICS_SHA256:${{ steps.check_change.outputs.hash }}" \
-            --asset "$OUTPUT_ASSET" \
-            --latest
-
-          echo "Legacy mirrored asset URL: https://github.com/${LEGACY_REPOSITORY}/releases/download/latest/${OUTPUT_ASSET}" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Prepare and upload Pages artifact
         if: steps.check_change.outputs.skip != 'true'
