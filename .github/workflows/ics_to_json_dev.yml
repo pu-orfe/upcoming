@@ -37,7 +37,6 @@ jobs:
     outputs:
       skip_generation: ${{ steps.check_change.outputs.skip }}
     env:
-      LEGACY_REPOSITORY: pu-shd/orfe-upcoming
       PAGES_CNAME: upcoming.orfe.princeton.edu
       ICS_URL: ${{ vars.ICS_URL }}
       REPO_VARIABLE: ${{ vars.REPO_VARIABLE }}
@@ -141,30 +140,6 @@ jobs:
 
           echo "Canonical dev asset URL: https://github.com/${GITHUB_REPOSITORY}/releases/download/dev/${OUTPUT_ASSET}" >> "$GITHUB_STEP_SUMMARY"
           echo "Canonical dev asset (no FPO) URL: https://github.com/${GITHUB_REPOSITORY}/releases/download/dev/${OUTPUT_NOFPO}" >> "$GITHUB_STEP_SUMMARY"
-
-      # Best effort: the legacy mirror is for migrating consumers only, so a
-      # failure here must not stop the canonical Pages deploy.
-      - name: Mirror to legacy repository
-        if: steps.check_change.outputs.skip != 'true'
-        continue-on-error: true
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          TARGET_GITHUB_TOKEN: ${{ secrets.LEGACY_REPOSITORY_TOKEN }}
-        run: |
-          set -euo pipefail
-          OUTPUT_ASSET="${OUTPUT_FILE:-events.json}"
-          OUTPUT_NOFPO="${NOFPO_OUTPUT_FILE:-events-nofpo.json}"
-          python -m src.mirror_release \
-            --target-repo "${LEGACY_REPOSITORY}" \
-            --target-commitish main \
-            --tag dev \
-            --title "Development Events" \
-            --notes "Development build of events feed from ${GITHUB_REF_NAME} (${GITHUB_SHA}). Includes filtered variant without FPO series. ICS_SHA256:${{ steps.check_change.outputs.hash }}" \
-            --asset "$OUTPUT_ASSET" \
-            --asset "$OUTPUT_NOFPO"
-
-          echo "Legacy mirrored dev asset URL: https://github.com/${LEGACY_REPOSITORY}/releases/download/dev/${OUTPUT_ASSET}" >> "$GITHUB_STEP_SUMMARY"
-          echo "Legacy mirrored dev asset (no FPO) URL: https://github.com/${LEGACY_REPOSITORY}/releases/download/dev/${OUTPUT_NOFPO}" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Prepare and upload Pages artifact
         if: steps.check_change.outputs.skip != 'true'

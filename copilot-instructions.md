@@ -3,7 +3,7 @@
 ## Project Purpose
 - Generate a normalized JSON events feed (`events.json`) from an upstream ICS calendar, with optional web-scraping enrichment for titles, content, and raw details.
 - Intended for automation (GitHub Actions) and manual CLI use; schema compliance enforced via `schema/events.schema.json`.
-- Canonical development happens in `pu-orfe/upcoming`; release assets are mirrored into `pu-shd/orfe-upcoming` while legacy consumers migrate.
+- Canonical development and publishing both happen in `pu-orfe/upcoming`. Legacy-repository mirroring is retired; `src/mirror_release.py` is retained, unwired, for possible reintroduction.
 - `pu-orfe/upcoming` is public so its release assets are directly shareable. Production refreshes run on a native every-30-minutes GitHub Actions schedule, a heartbeat workflow creates a tiny keepalive commit after 35 idle days so public-repo schedules do not age out, and the latest production payload is also deployed to GitHub Pages for `upcoming.orfe.princeton.edu/events.json`.
 
 ## Architecture Overview
