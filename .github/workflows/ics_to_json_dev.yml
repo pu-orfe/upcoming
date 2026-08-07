@@ -25,6 +25,10 @@ permissions:
   pages: write
   id-token: write
 
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
 jobs:
   build-and-publish-dev:
     # Allow any development branch to overwrite the shared dev release on demand.
@@ -33,9 +37,7 @@ jobs:
     outputs:
       skip_generation: ${{ steps.check_change.outputs.skip }}
     env:
-      LEGACY_REPOSITORY: princeton-orfe/orfe-upcoming
       PAGES_CNAME: upcoming.orfe.princeton.edu
-      DEV_OUTPUT_DIR: pages/dev
       ICS_URL: ${{ vars.ICS_URL }}
       REPO_VARIABLE: ${{ vars.REPO_VARIABLE }}
       OUTPUT_FILE: ${{ vars.OUTPUT_FILE }}
@@ -88,7 +90,7 @@ jobs:
 
       - name: Set up Python
         if: steps.check_change.outputs.skip != 'true'
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v7
         with:
           python-version: '3.12'
 
@@ -118,15 +120,10 @@ jobs:
         run: |
           python tools/validate_json.py --schema schema/events.schema.json --data "${NOFPO_OUTPUT_FILE:-events-nofpo.json}"
 
-      - name: Configure GitHub Pages
-        if: steps.check_change.outputs.skip != 'true'
-        uses: actions/configure-pages@v6
-
       - name: Publish "dev" releases
         if: steps.check_change.outputs.skip != 'true'
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          TARGET_GITHUB_TOKEN: ${{ secrets.LEGACY_REPOSITORY_TOKEN }}
         run: |
           set -euo pipefail
           OUTPUT_ASSET="${OUTPUT_FILE:-events.json}"
@@ -140,51 +137,20 @@ jobs:
           # Overwrite existing 'dev' release
           gh release delete "$TAG" -y 2>/dev/null || true
           gh release create "$TAG" "$OUTPUT_ASSET" "$OUTPUT_NOFPO" --title "$TITLE" --notes "$BODY" --latest=false --target "${SOURCE_SHA}"
-          python -m src.mirror_release \
-            --target-repo "${LEGACY_REPOSITORY}" \
-            --target-commitish main \
-            --tag "$TAG" \
-            --title "$TITLE" \
-            --notes "$BODY" \
-            --asset "$OUTPUT_ASSET" \
-            --asset "$OUTPUT_NOFPO"
 
           echo "Canonical dev asset URL: https://github.com/${GITHUB_REPOSITORY}/releases/download/dev/${OUTPUT_ASSET}" >> "$GITHUB_STEP_SUMMARY"
           echo "Canonical dev asset (no FPO) URL: https://github.com/${GITHUB_REPOSITORY}/releases/download/dev/${OUTPUT_NOFPO}" >> "$GITHUB_STEP_SUMMARY"
-          echo "Legacy mirrored dev asset URL: https://github.com/${LEGACY_REPOSITORY}/releases/download/dev/${OUTPUT_ASSET}" >> "$GITHUB_STEP_SUMMARY"
-          echo "Legacy mirrored dev asset (no FPO) URL: https://github.com/${LEGACY_REPOSITORY}/releases/download/dev/${OUTPUT_NOFPO}" >> "$GITHUB_STEP_SUMMARY"
 
-      - name: Prepare Pages artifact
+      - name: Prepare and upload Pages artifact
         if: steps.check_change.outputs.skip != 'true'
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          set -euo pipefail
-          OUTPUT_ASSET="${OUTPUT_FILE:-events.json}"
-          OUTPUT_NOFPO="${NOFPO_OUTPUT_FILE:-events-nofpo.json}"
-          mkdir -p pages "${DEV_OUTPUT_DIR}"
-          if curl -fsSL https://upcoming.orfe.princeton.edu/ -o pages/index.html; then
-            :
-          else
-            cp site/index.html pages/index.html
-          fi
-          if gh release view latest >/dev/null 2>&1; then
-            gh release download latest --pattern 'events.json' --dir pages
-          else
-            cp "$OUTPUT_ASSET" pages/events.json
-          fi
-          cp site/dev/index.html "${DEV_OUTPUT_DIR}/index.html"
-          cp "$OUTPUT_ASSET" "${DEV_OUTPUT_DIR}/events.json"
-          cp "$OUTPUT_NOFPO" "${DEV_OUTPUT_DIR}/events-nofpo.json"
-          cp examples/dev_test_payload.json "${DEV_OUTPUT_DIR}/test.json"
-          printf '%s\n' "${PAGES_CNAME}" > pages/CNAME
-          touch pages/.nojekyll
-
-      - name: Upload Pages artifact
-        if: steps.check_change.outputs.skip != 'true'
-        uses: actions/upload-pages-artifact@v5
+        uses: ./actions/prepare-pages-artifact
         with:
-          path: pages
+          cname: ${{ env.PAGES_CNAME }}
+          prod-events-source: release
+          dev-events-source: local
+          dev-events-file: ${{ env.OUTPUT_FILE || 'events.json' }}
+          dev-events-nofpo-file: ${{ env.NOFPO_OUTPUT_FILE || 'events-nofpo.json' }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Upload JSON artifact (Dev)
         if: steps.check_change.outputs.skip != 'true'

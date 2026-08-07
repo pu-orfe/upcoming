@@ -10,15 +10,15 @@ def test_fill_title_fallback_blank_and_tbd(monkeypatch):
         {"guid": "2", "speaker": "Bob", "title": "  TBD  "},
         {"guid": "3", "speaker": "Carol", "title": None},
         {"guid": "4", "speaker": "Dave", "title": "Existing"},
-        {"guid": "5", "speaker": "", "title": ""},  # no speaker -> unchanged
+        {"guid": "5", "speaker": "", "title": ""},  # no speaker -> last-resort title
     ]
     filled = fill_title_fallback(events, overwrite=False)
-    assert filled == 3
+    assert filled == 4
     assert events[0]["title"] == "Alice"
     assert events[1]["title"] == "Bob"
     assert events[2]["title"] == "Carol"
     assert events[3]["title"] == "Existing"
-    assert events[4]["title"] == ""
+    assert events[4]["title"] == "A Seminar Talk"
 
 
 def test_fill_title_fallback_with_prefix(monkeypatch):
@@ -105,14 +105,48 @@ def test_fill_title_fallback_without_speaker(monkeypatch):
 
 
 def test_fill_title_fallback_without_speaker_no_template(monkeypatch):
-    """When include_speaker=False and no template, nothing should be filled."""
+    """When include_speaker=False and no template, fall back to a series-derived title."""
     monkeypatch.delenv("FALLBACK_PREPEND_TEXT", raising=False)
     events = [
-        {"guid": "1", "speaker": "Alice", "title": ""},
+        {"guid": "1", "speaker": "Alice", "title": "", "series": "Optimization Seminar"},
+        {"guid": "2", "speaker": "Bob", "title": ""},  # no series either
     ]
     filled = fill_title_fallback(events, overwrite=False, include_speaker=False)
-    assert filled == 0
-    assert events[0]["title"] == ""
+    assert filled == 2
+    assert events[0]["title"] == "An Optimization Seminar Talk"
+    assert events[1]["title"] == "A Seminar Talk"
+
+
+def test_fill_title_fallback_last_resort_no_speaker_no_template(monkeypatch):
+    """Events without speaker or template never keep an empty title."""
+    monkeypatch.delenv("FALLBACK_PREPEND_TEXT", raising=False)
+    events = [
+        {"guid": "1", "speaker": "", "title": "", "series": "Optimization Seminar"},
+        {"guid": "2", "speaker": None, "title": "TBD", "series": "S. S. Wilks Memorial Seminar in Statistics"},
+        # Multi-series: use the first series only
+        {"guid": "3", "speaker": "", "title": "", "series": "Optimization Seminar,ORFE Department Colloquia"},
+        {"guid": "4", "speaker": "", "title": "", "series": ""},
+        {"guid": "5", "speaker": "", "title": ""},  # no series key
+    ]
+    filled = fill_title_fallback(events, overwrite=False)
+    assert filled == 5
+    assert events[0]["title"] == "An Optimization Seminar Talk"
+    assert events[1]["title"] == "A S. S. Wilks Memorial Seminar in Statistics Talk"
+    assert events[2]["title"] == "An Optimization Seminar Talk"
+    assert events[3]["title"] == "A Seminar Talk"
+    assert events[4]["title"] == "A Seminar Talk"
+    assert all(ev["title"].strip() for ev in events)
+
+
+def test_fill_title_fallback_no_speaker_with_template(monkeypatch):
+    """With a template but no speaker, use the template alone (strip trailing 'by')."""
+    monkeypatch.setenv("FALLBACK_PREPEND_TEXT", "{a_an} {series} Talk by")
+    events = [
+        {"guid": "1", "speaker": "", "title": "", "series": "Optimization Seminar"},
+    ]
+    filled = fill_title_fallback(events, overwrite=False)
+    assert filled == 1
+    assert events[0]["title"] == "An Optimization Seminar Talk"
 
 
 def test_fill_title_fallback_without_speaker_missing_series(monkeypatch):

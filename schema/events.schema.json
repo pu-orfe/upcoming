@@ -62,7 +62,8 @@
       },
       "title": {
         "type": "string",
-        "description": "Optional title populated via enrichment (subtitle) or fallback from speaker; may be empty when enrichment is disabled."
+        "minLength": 1,
+        "description": "Title populated via enrichment (subtitle), fallback from speaker/template, or a series-derived last resort; never empty."
       },
       "cancelled": {
         "type": "string",

@@ -1,0 +1,104 @@
+name: 'Prepare and Upload Pages Artifact'
+description: 'Assembles the ORFE Upcoming Pages tree from site/** plus release assets, and uploads it for GitHub Pages deployment.'
+
+inputs:
+  cname:
+    description: 'Value to write to pages/CNAME'
+    required: true
+  prod-events-source:
+    description: '"local" to copy prod-events-file, "release" to download events.json from the "latest" release'
+    required: false
+    default: 'release'
+  prod-events-file:
+    description: 'Path to a local events.json to publish as /events.json (used when prod-events-source is "local")'
+    required: false
+    default: ''
+  dev-events-source:
+    description: '"local" to copy dev-events-file/dev-events-nofpo-file, "release" to download from the "dev" release'
+    required: false
+    default: 'release'
+  dev-events-file:
+    description: 'Path to a local events.json to publish as /dev/events.json (used when dev-events-source is "local")'
+    required: false
+    default: ''
+  dev-events-nofpo-file:
+    description: 'Path to a local events-nofpo.json to publish as /dev/events-nofpo.json (used when dev-events-source is "local")'
+    required: false
+    default: ''
+  github-token:
+    description: 'GITHUB_TOKEN for gh release downloads'
+    required: true
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Configure GitHub Pages
+      uses: actions/configure-pages@v6
+
+    - name: Assemble Pages tree
+      shell: bash
+      env:
+        GH_TOKEN: ${{ inputs.github-token }}
+        PAGES_CNAME: ${{ inputs.cname }}
+        PROD_SOURCE: ${{ inputs.prod-events-source }}
+        PROD_FILE: ${{ inputs.prod-events-file }}
+        DEV_SOURCE: ${{ inputs.dev-events-source }}
+        DEV_FILE: ${{ inputs.dev-events-file }}
+        DEV_NOFPO_FILE: ${{ inputs.dev-events-nofpo-file }}
+      run: |
+        set -euo pipefail
+        mkdir -p pages pages/dev
+        cp site/index.html pages/index.html
+        cp site/dev/index.html pages/dev/index.html
+
+        case "${PROD_SOURCE}" in
+          local)
+            if [ -z "${PROD_FILE}" ]; then
+              echo "prod-events-source=local but prod-events-file is empty" >&2
+              exit 1
+            fi
+            cp "${PROD_FILE}" pages/events.json
+            ;;
+          release)
+            if gh release view latest >/dev/null 2>&1; then
+              gh release download latest --pattern 'events.json' --dir pages
+            else
+              echo "::warning::latest release not found; /events.json will be absent from this deploy"
+            fi
+            ;;
+          *)
+            echo "unknown prod-events-source: ${PROD_SOURCE}" >&2
+            exit 1
+            ;;
+        esac
+
+        case "${DEV_SOURCE}" in
+          local)
+            if [ -z "${DEV_FILE}" ] || [ -z "${DEV_NOFPO_FILE}" ]; then
+              echo "dev-events-source=local requires dev-events-file and dev-events-nofpo-file" >&2
+              exit 1
+            fi
+            cp "${DEV_FILE}" pages/dev/events.json
+            cp "${DEV_NOFPO_FILE}" pages/dev/events-nofpo.json
+            ;;
+          release)
+            if gh release view dev >/dev/null 2>&1; then
+              gh release download dev --pattern 'events.json' --pattern 'events-nofpo.json' --dir pages/dev
+            else
+              echo "::warning::dev release not found; /dev/events.json and /dev/events-nofpo.json will be absent from this deploy"
+            fi
+            ;;
+          *)
+            echo "unknown dev-events-source: ${DEV_SOURCE}" >&2
+            exit 1
+            ;;
+        esac
+
+        cp examples/dev_test_payload.json pages/dev/test.json
+        printf '%s\n' "${PAGES_CNAME}" > pages/CNAME
+        touch pages/.nojekyll
+
+    - name: Upload Pages artifact
+      uses: actions/upload-pages-artifact@v5
+      with:
+        path: pages

@@ -1,0 +1,47 @@
+name: Publish Landing Pages
+
+# Rebuilds only the GitHub Pages artifact from site/** plus the existing
+# `latest` and `dev` release assets. Use this to ship changes to
+# site/index.html or site/dev/index.html without running the ICS pipeline.
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    env:
+      PAGES_CNAME: upcoming.orfe.princeton.edu
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v7
+
+      - name: Prepare and upload Pages artifact
+        uses: ./actions/prepare-pages-artifact
+        with:
+          cname: ${{ env.PAGES_CNAME }}
+          prod-events-source: release
+          dev-events-source: release
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+  deploy-pages:
+    needs: build
+    if: needs.build.result == 'success'
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v5

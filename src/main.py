@@ -283,17 +283,18 @@ def main(argv: list[str] | None = None) -> int:
             f"Enriched titles: attempted={stats.attempted} updated={stats.updated} "
             f"errors={stats.errors} overwrite={'true' if overwrite else 'false'}"
         )
-        # Post-process fallback: ensure no blank or 'TBD' titles remain.
-        # Fill from FALLBACK_PREPEND_TEXT template, optionally with speaker.
-        # Only pass cli_flag when --no-fallback-speaker is explicitly used
-        cli_no_speaker = getattr(ns, 'no_fallback_speaker', False)
-        include_speaker = fallback_include_speaker_enabled(
-            cli_flag=False if cli_no_speaker else None
-        )
-        filled = fill_title_fallback(data, overwrite=False, include_speaker=include_speaker)
-        if filled:
-            source = "speaker field" if include_speaker else "template"
-            print(f"Fallback populated {filled} titles from {source}")
+    # Post-process fallback: ensure no blank or 'TBD' titles remain, even when
+    # enrichment is disabled. Fill from FALLBACK_PREPEND_TEXT template,
+    # optionally with speaker; guarantees a series-derived title as last resort.
+    # Only pass cli_flag when --no-fallback-speaker is explicitly used
+    cli_no_speaker = getattr(ns, 'no_fallback_speaker', False)
+    include_speaker = fallback_include_speaker_enabled(
+        cli_flag=False if cli_no_speaker else None
+    )
+    filled = fill_title_fallback(data, overwrite=False, include_speaker=include_speaker)
+    if filled:
+        source = "speaker field" if include_speaker else "template"
+        print(f"Fallback populated {filled} titles from {source}")
 
     # Optional content enrichment (independent of title enrichment)
     do_content_enrich = enrichment_content_enabled(ns.enrich_content)

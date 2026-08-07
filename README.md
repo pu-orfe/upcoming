@@ -2,7 +2,7 @@
 
 Automated pipeline that fetches a department ICS feed, applies configurable transformation, and publishes a stable JSON file as a GitHub Release asset.
 
-Canonical development now happens in `pu-orfe/upcoming`. During the migration window, release assets are mirrored back into `princeton-orfe/orfe-upcoming` so existing consumers can keep using the legacy stable URLs. The old app/Azure dispatcher is no longer required; production refreshes now run on a native GitHub Actions schedule, a small heartbeat workflow keeps the public repo's schedules from aging out, and the latest production payload is also deployed to GitHub Pages for `upcoming.orfe.princeton.edu`.
+Canonical development and publishing both happen in `pu-orfe/upcoming`. Release-asset mirroring to a legacy repository is currently retired (see [Legacy mirror](#legacy-mirror)). The old app/Azure dispatcher is no longer required; production refreshes now run on a native GitHub Actions schedule, a small heartbeat workflow keeps the public repo's schedules from aging out, and the latest production payload is also deployed to GitHub Pages for `upcoming.orfe.princeton.edu`.
 
 ## Features
 
@@ -26,8 +26,7 @@ Canonical development now happens in `pu-orfe/upcoming`. During the migration wi
 - Canonical public URL: `https://github.com/pu-orfe/upcoming/releases/download/latest/events.json`
 - Landing page: `https://upcoming.orfe.princeton.edu/`
 - Custom-domain URL: `https://upcoming.orfe.princeton.edu/events.json`
-- Legacy mirror URL: `https://github.com/princeton-orfe/orfe-upcoming/releases/download/latest/events.json`
-- Published from `pu-orfe/upcoming`, then mirrored to the legacy release URL above
+- Published from `pu-orfe/upcoming`
 - Triggers: Scheduled (every 30 minutes via native GitHub Actions cron), manual
 - Purpose: Stable production feed
 
@@ -43,8 +42,7 @@ Canonical development now happens in `pu-orfe/upcoming`. During the migration wi
   - `https://upcoming.orfe.princeton.edu/dev/events.json`
   - `https://upcoming.orfe.princeton.edu/dev/events-nofpo.json`
   - `https://upcoming.orfe.princeton.edu/dev/test.json`
-- Legacy mirror URL: `https://github.com/princeton-orfe/orfe-upcoming/releases/dev/download/events.json`
-- Published from `pu-orfe/upcoming`, then mirrored to the legacy release URL above
+- Published from `pu-orfe/upcoming`
 - Triggers: Manual (`workflow_dispatch` on the development branch you want to test)
 - Purpose: Testing environment
 
@@ -52,6 +50,76 @@ Canonical development now happens in `pu-orfe/upcoming`. During the migration wi
 - URL: `https://upcoming.orfe.princeton.edu/dev/test.json`
 - Contents: a static, realistic dummy feed based on the shape and style of previously served ORFE Upcoming assets
 - Intended use: remote ingest and downstream integration testing when the live production or development feeds are empty or otherwise unsuitable as test input
+
+### Landing pages
+
+The Pages site has two hand-written HTML pages:
+
+| Path | Serves | Edit this file |
+|------|--------|----------------|
+| `/` | `https://upcoming.orfe.princeton.edu/` | `site/index.html` |
+| `/dev/` | `https://upcoming.orfe.princeton.edu/dev/` | `site/dev/index.html` |
+
+How to ship a change:
+
+- **`site/index.html`** (production landing): merge to `main`, then dispatch **`Publish Landing Pages`**. This workflow only rebuilds the Pages artifact (no ICS fetch, no JSON regeneration) and reuses the current `latest`/`dev` release assets for the JSON endpoints. Restricted to `main`.
+- **`site/dev/index.html`** (dev landing): dispatch **`ICS to JSON (Development)`** from the branch with your edits, with `force: true`. The dev workflow now publishes `site/index.html` from the branch too, so you can preview both landing pages together.
+
+The Pages tree is assembled by the local composite action `actions/prepare-pages-artifact`, which all three workflows share.
+
+### Publish verification
+
+**`Verify Published Feed`** (`.github/workflows/verify_published_feed.yml`) runs every 30 minutes and answers two questions the pipeline cannot answer about itself:
+
+| Check | Catches |
+|-------|---------|
+| Served bytes vs the release asset, per path | A release was published but Pages never deployed, so the site serves an older payload |
+| Live ICS hash vs `ICS_SHA256` in the `latest` release body | Generation stopped, so the site and the release are stale *together* and agree with each other |
+
+It runs on its own schedule rather than as a step in the publish job on purpose. When the publish job fails early, its remaining steps are *skipped*, not failed — a check living there would be skipped alongside the deploy it was meant to verify.
+
+Both checks tolerate normal transients rather than paging on them:
+
+- Pages sits behind a CDN with `max-age=600` and per-edge caches, and neither a query string nor `Cache-Control: no-cache` forces revalidation. A mismatch within a 20-minute grace window after publication is `pending`, not a fault.
+- Each path is sampled several times, likely landing on different edges. **Any one matching sample passes** — it proves the deploy reached the origin, so a stale sibling edge is just serving out its TTL.
+- An unreachable host is reported as `error`, never as a content problem.
+- Alerting requires two consecutive failing runs, so a single blip is never actionable.
+
+Run it locally with:
+```bash
+GITHUB_TOKEN=$(gh auth token) python -m src.verify_published_feed \
+  --base-url https://upcoming.orfe.princeton.edu \
+  --repo pu-orfe/upcoming \
+  --check "events.json=latest:events.json" \
+  --ics-url "$ICS_URL"
+```
+Exit codes: `0` ok, `1` drift, `2` error, `3` ICS stale.
+
+### Legacy mirror
+
+Mirroring to a legacy repository is **retired**. Nothing in CI writes to another repository any more:
+
+- the release-mirror step was removed from `ICS to JSON` and `ICS to JSON (Development)`
+- the `Mirror legacy repository` workflow, which force-pushed `main` and all tags on every push, was deleted
+
+`src/mirror_release.py` and its tests are deliberately **kept but unwired**, so reintroduction is a workflow change rather than a rewrite. The module resolves a target repository's canonical name before mutating it and follows redirects on all HTTP methods, which matters because a renamed target otherwise fails `DELETE` with HTTP 307.
+
+To reintroduce it, add a step like this *after* the canonical release is published, and keep `continue-on-error` so a mirror problem can never block the Pages deploy:
+
+```yaml
+- name: Mirror to legacy repository
+  if: steps.check_change.outputs.skip != 'true'
+  continue-on-error: true
+  env:
+    TARGET_GITHUB_TOKEN: ${{ secrets.LEGACY_REPOSITORY_TOKEN }}
+  run: |
+    python -m src.mirror_release \
+      --target-repo "<owner>/<name>" --target-commitish main \
+      --tag latest --title "Latest Events" --notes "..." \
+      --asset events.json --latest
+```
+
+The `LEGACY_REPOSITORY_TOKEN` secret is left in place for that purpose.
 
 ### Local Development
 
@@ -126,6 +194,8 @@ These environment variables and workflow inputs control behavior at runtime.
 | `ENRICH_RAW_EXTRACTS_OVERWRITE` | CLI/CI | bool | `false` | Overwrite existing `rawExtractAbstract`/`rawExtractBio` values when extracting. |
 
 Boolean envs accept: `1,true,yes,on` (case-insensitive) for true.
+
+Titles are guaranteed non-empty (enforced by `minLength: 1` in the schema). The fill order is: enriched subtitle → `FALLBACK_PREPEND_TEXT` template (+ speaker unless disabled) → a series-derived last resort such as `An Optimization Seminar Talk` (`A Seminar Talk` when the event has no series). The fallback pass runs even when title enrichment is disabled.
 
 ### Transform parameters
 

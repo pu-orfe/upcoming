@@ -12,7 +12,7 @@
     "speaker": "Ada Lovelace\\, Example University",
     "content": "Abstract: This static test fixture mirrors the structure of a typical ORFE seminar record served by the upcoming feed. It exists only for downstream ingest validation while the live production feed is sparse or empty.",
     "series": "S. S. Wilks Memorial Seminar in Statistics",
-    "title": "",
+    "title": "Poissonization and Sample Splitting in High-Dimensional Hypothesis Testing",
     "cancelled": "",
     "bannerImage": "",
     "itemType": "advertisement"
@@ -30,7 +30,7 @@
     "speaker": "Grace Hopper\\, Sample Labs",
     "content": "Abstract: This record uses the same top-level keys, nested location object, and general text density as the production feed so consumers can exercise parsing, indexing, and display behavior against realistic JSON.",
     "series": "Optimization Seminar",
-    "title": "",
+    "title": "First-Order Methods for Structured Nonconvex Programs: Sharpness and Acceleration",
     "cancelled": "",
     "bannerImage": "",
     "itemType": "advertisement"
@@ -46,8 +46,9 @@
       "detail": "101"
     },
     "speaker": "Katherine Johnson\\, Demo Institute",
+    "content": "Abstract: This record exercises the multi-series case, where an event belongs to more than one seminar series and the series field is a comma-separated list. Consumers should verify they split and display multiple series correctly.",
     "series": "Optimization Seminar,ORFE Department Colloquia",
-    "title": "",
+    "title": "Trajectory Optimization Under Uncertainty: Lessons from Orbital Mechanics",
     "cancelled": "",
     "bannerImage": "",
     "itemType": "advertisement"
@@ -65,7 +66,7 @@
     "speaker": "Claude Shannon\\, Mock Research Center",
     "content": "Abstract: Integration-test fixtures should look realistic without depending on current departmental schedules. This sample preserves expected field names, date formatting, and seminar metadata while remaining safe to reuse in automated tests.",
     "series": "ORFE Department Colloquia",
-    "title": "",
+    "title": "A Mathematical Theory of Communication, Revisited: Information Limits in Sequential Decision-Making",
     "cancelled": "",
     "bannerImage": "",
     "itemType": "advertisement"

@@ -529,6 +529,9 @@ def fill_title_fallback(events: List[Dict], overwrite: bool = False, include_spe
     - When `include_speaker` is True (default), appends speaker to the prefix template.
     - When `include_speaker` is False, uses only the rendered FALLBACK_PREPEND_TEXT
       (e.g., "A {series} Talk" without the speaker name).
+    - Guarantees a non-empty title: when neither the speaker nor a usable template
+      is available, derives a last-resort title from the event's series
+      (e.g., "An Optimization Seminar Talk"), or "A Seminar Talk" without a series.
 
     Returns the number of events whose title was set.
     """
@@ -568,6 +571,12 @@ def fill_title_fallback(events: List[Dict], overwrite: bool = False, include_spe
     raw_prefix_tmpl = os.getenv("FALLBACK_PREPEND_TEXT", "")
     raw_prefix_tmpl = raw_prefix_tmpl if isinstance(raw_prefix_tmpl, str) else ""
 
+    def _last_resort_title(ev: Dict) -> str:
+        """Series-derived title used when no speaker or template can produce one."""
+        series = str(ev.get("series") or "").split(",")[0].strip()
+        text = " ".join(f"{_A_AN_MARKER} {series} Talk".split()) if series else "A Seminar Talk"
+        return _resolve_a_an(text)
+
     count = 0
     for ev in events:
         existing = ev.get("title")
@@ -590,25 +599,24 @@ def fill_title_fallback(events: List[Dict], overwrite: bool = False, include_spe
             # Resolve A/An based on next word
             prefix_rendered = _resolve_a_an(prefix_rendered)
 
-        if include_speaker:
-            speaker = ev.get("speaker")
-            if not speaker:
-                continue
+        speaker = ev.get("speaker") if include_speaker else None
+        use_prefix = bool(prefix_rendered) and len(prefix_rendered) < MAX_PREFIX_LEN
+        if speaker:
             speaker_str = str(speaker)
-            use_prefix = bool(prefix_rendered) and len(prefix_rendered) < MAX_PREFIX_LEN
             ev["title"] = (
                 f"{prefix_rendered} {speaker_str}" if use_prefix else speaker_str
             )
-            count += 1
+        elif use_prefix:
+            # No speaker to append: use the template alone, stripping a trailing
+            # "by" (case-insensitive) since no name follows.
+            title = prefix_rendered.rstrip()
+            if title.lower().endswith(" by"):
+                title = title[:-3].rstrip()
+            ev["title"] = title
         else:
-            # Without speaker, only set title if we have a non-empty prefix.
-            # Strip trailing "by" (case-insensitive) since speaker won't follow.
-            if prefix_rendered and len(prefix_rendered) < MAX_PREFIX_LEN:
-                title = prefix_rendered.rstrip()
-                if title.lower().endswith(" by"):
-                    title = title[:-3].rstrip()
-                ev["title"] = title
-                count += 1
+            # No speaker and no usable template: never leave a title empty.
+            ev["title"] = _last_resort_title(ev)
+        count += 1
     return count
 
 

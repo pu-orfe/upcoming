@@ -1,0 +1,134 @@
+name: Verify Published Feed
+
+# Watchdog for the gap that let the site go stale unnoticed: the pipeline job
+# died before its Pages steps, so those steps were *skipped* rather than failed
+# and nothing reported a problem. A check living inside that job would have been
+# skipped too, so this runs on its own schedule and reports on what
+# upcoming.orfe.princeton.edu actually serves, whatever the pipeline did.
+
+on:
+  schedule:
+    # Offset from the ICS pipeline's */30 so a fresh deploy has time to land.
+    - cron: '10,40 * * * *'
+  workflow_dispatch:
+    inputs:
+      attempts:
+        description: 'Samples per path'
+        required: false
+        default: '3'
+        type: string
+      grace_minutes:
+        description: 'Minutes after publication during which a mismatch is only pending'
+        required: false
+        default: '20'
+        type: string
+
+permissions:
+  contents: read
+  issues: write
+  actions: read
+
+concurrency:
+  group: verify-published-feed
+  cancel-in-progress: false
+
+jobs:
+  verify:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    env:
+      SITE_BASE_URL: https://upcoming.orfe.princeton.edu
+      ICS_URL: ${{ vars.ICS_URL }}
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v7
+
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+
+      - name: Compare served feed against release assets
+        id: verify
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          # --ics-url additionally catches the sibling failure the comparison
+          # above is blind to: if generation stops, the site and the release go
+          # stale together and agree with each other.
+          python -m src.verify_published_feed \
+            --base-url "${SITE_BASE_URL}" \
+            --repo "${GITHUB_REPOSITORY}" \
+            --check "events.json=latest:events.json" \
+            --check "dev/events.json=dev:events.json" \
+            --check "dev/events-nofpo.json=dev:events-nofpo.json" \
+            --attempts "${{ github.event.inputs.attempts || '3' }}" \
+            --interval 30 \
+            --grace-minutes "${{ github.event.inputs.grace_minutes || '20' }}" \
+            ${ICS_URL:+--ics-url "$ICS_URL"} \
+            | tee -a "$GITHUB_STEP_SUMMARY"
+
+      # A single drifting run is not actionable: edge caches expire
+      # independently and a deploy may still be propagating. Alert only when the
+      # previous scheduled run drifted too.
+      - name: Alert on sustained drift
+        if: failure() && steps.verify.outcome == 'failure'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          previous=$(gh run list \
+            --workflow verify_published_feed.yml \
+            --branch main \
+            --status completed \
+            --limit 1 \
+            --json conclusion -q '.[0].conclusion' || echo "")
+          echo "Previous run concluded: ${previous:-<none>}"
+
+          if [ "$previous" != "failure" ]; then
+            echo "First drifting run; waiting for confirmation before alerting." >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+
+          gh label list --search feed-drift | grep -qi '^feed-drift' \
+            || gh label create feed-drift --color B60205 --description "Served feed does not match the published asset" || true
+
+          if [ "${{ steps.verify.outputs.drift }}" = "true" ]; then
+            headline="The site served content that does not match the published release asset across two consecutive checks."
+            guidance="This usually means a release was published but the Pages deploy did not run or did not succeed. Re-run the **Publish Landing Pages** workflow to redeploy from the current release assets."
+          elif [ "${{ steps.verify.outputs.stale }}" = "true" ]; then
+            headline="The live ICS feed no longer matches the ICS_SHA256 the \`latest\` release was built from, across two consecutive checks."
+            guidance="The site and the release agree with each other but both are behind the source feed, so generation has stopped. Check the **ICS to JSON** workflow: a run that publishes the release but then fails can leave its hash recorded, making every later run skip regeneration. Dispatch it with \`force: true\` to break out."
+          else
+            headline="The published feed could not be fetched across two consecutive checks."
+            guidance="The site or the release API may be unavailable. Check the run log for the failing URL before assuming a deploy problem."
+          fi
+
+          body="$(printf '%s\n' \
+            "$headline" \
+            "" \
+            "Base URL: ${SITE_BASE_URL}" \
+            "" \
+            "$guidance" \
+            "" \
+            "Run: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}")"
+
+          existing=$(gh issue list --state open --label feed-drift --json number -q '.[0].number' || echo "")
+          if [ -z "$existing" ]; then
+            gh issue create --title "Published feed does not match release asset" --label feed-drift --body "$body" || true
+          else
+            gh issue comment "$existing" --body "$body" || true
+          fi
+
+      - name: Close drift issue once the feed matches
+        if: success()
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          existing=$(gh issue list --state open --label feed-drift --json number -q '.[0].number' || echo "")
+          if [ -n "$existing" ]; then
+            gh issue comment "$existing" --body "Served feed matches the published release asset again. Closing." || true
+            gh issue close "$existing" || true
+          fi
