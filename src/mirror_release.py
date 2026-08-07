@@ -16,6 +16,12 @@ from urllib.request import Request, urlopen
 API_ROOT = "https://api.github.com"
 API_VERSION = "2022-11-28"
 
+# GitHub answers requests for a renamed repository with a redirect. urllib only
+# follows redirects for GET/HEAD, so DELETE/POST against a renamed mirror fail
+# outright unless we follow them ourselves.
+REDIRECT_STATUSES = frozenset({301, 302, 307, 308})
+MAX_REDIRECTS = 5
+
 
 class GitHubApiError(RuntimeError):
     """Raised when the GitHub API returns an unexpected response."""
@@ -74,19 +80,57 @@ def _request_json(
         data = json.dumps(payload).encode("utf-8")
         headers["Content-Type"] = content_type
 
-    request = Request(url, data=data, method=method, headers=headers)
-    try:
-        with urlopen(request) as response:
-            body = response.read()
-    except HTTPError as exc:
-        body = exc.read().decode("utf-8", errors="replace")
-        if allow_not_found and exc.code == 404:
-            return None
-        raise GitHubApiError(f"{method} {url} failed with HTTP {exc.code}: {body}") from exc
+    for _ in range(MAX_REDIRECTS + 1):
+        request = Request(url, data=data, method=method, headers=headers)
+        try:
+            with urlopen(request) as response:
+                body = response.read()
+            break
+        except HTTPError as exc:
+            body_text = exc.read().decode("utf-8", errors="replace")
+            if allow_not_found and exc.code == 404:
+                return None
+            redirect = _redirect_target(exc, body_text) if exc.code in REDIRECT_STATUSES else None
+            if redirect is None:
+                raise GitHubApiError(
+                    f"{method} {url} failed with HTTP {exc.code}: {body_text}"
+                ) from exc
+            url = redirect
+    else:
+        raise GitHubApiError(f"{method} {url} exceeded {MAX_REDIRECTS} redirects")
 
     if not body:
         return {}
     return json.loads(body)
+
+
+def _redirect_target(exc: HTTPError, body_text: str) -> str | None:
+    """Extract the follow-up URL from a GitHub redirect response."""
+    location = exc.headers.get("Location") if exc.headers else None
+    if location:
+        return location
+    try:
+        payload = json.loads(body_text)
+    except (TypeError, ValueError):
+        return None
+    target = payload.get("url") if isinstance(payload, dict) else None
+    return target if isinstance(target, str) else None
+
+
+def resolve_repo(repo: str, token: str) -> str:
+    """Return the repository's current ``owner/name``, following renames."""
+    metadata = _request_json(
+        method="GET",
+        url=f"{API_ROOT}/repos/{repo}",
+        token=token,
+        allow_not_found=True,
+    )
+    if not metadata:
+        raise GitHubApiError(f"Target repository {repo} was not found")
+    full_name = metadata.get("full_name")
+    if not isinstance(full_name, str) or not full_name:
+        raise GitHubApiError(f"GitHub did not return a full_name for {repo}")
+    return full_name
 
 
 def _upload_asset(upload_url: str, asset_path: Path, token: str) -> None:
@@ -176,6 +220,9 @@ def sync_release(
     target_commitish: str | None,
     token: str,
 ) -> None:
+    # A renamed mirror still answers under its old name, but only via redirects.
+    # Pin the canonical name up front so the mutating calls below hit it directly.
+    repo = resolve_repo(repo, token)
     delete_release(repo, tag, token)
     release = create_release(
         repo=repo,
