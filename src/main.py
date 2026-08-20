@@ -31,6 +31,8 @@ from .enrich import (
     enrichment_raw_details_overwrite_enabled,
     enrich_raw_extracts,
     enrichment_raw_extracts_enabled,
+    orfe_zwsp_enabled,
+    split_orfe_in_titles,
 )
 
 ICS_URL = os.getenv("ICS_URL", "https://example.com/calendar.ics")
@@ -244,6 +246,15 @@ def _parse_args(argv: list[str]) -> argparse.Namespace:
         help="Don't include speaker name in fallback titles; use only FALLBACK_PREPEND_TEXT template (env FALLBACK_INCLUDE_SPEAKER=0)",
     )
     p.add_argument(
+        "--title-orfe-zwsp",
+        action="store_true",
+        help=(
+            "Insert a zero-width space (U+200B) between the letters of 'ORFE' in the "
+            "title field only, leaving series and all other fields untouched "
+            "(env TITLE_ORFE_ZWSP=1)."
+        ),
+    )
+    p.add_argument(
         "--exclude-series",
         action="append",
         default=None,
@@ -324,6 +335,12 @@ def main(argv: list[str] | None = None) -> int:
             f"abstract={xstats.updated_abstract} bio={xstats.updated_bio} "
             f"errors={xstats.errors}"
         )
+
+    # Applied last so it sees every title, whatever produced it: enrichment,
+    # the speaker/template fallback, or the series-derived last resort.
+    if orfe_zwsp_enabled(getattr(ns, "title_orfe_zwsp", False)):
+        split = split_orfe_in_titles(data)
+        print(f"Split 'ORFE' with zero-width spaces in {split} titles")
 
     if ns.limit is not None:
         data = data[: ns.limit]

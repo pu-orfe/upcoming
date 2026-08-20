@@ -659,6 +659,44 @@ def fill_title_fallback(events: List[Dict], overwrite: bool = False, include_spe
     return count
 
 
+# U+200B ZERO WIDTH SPACE. Inserted between the letters of "ORFE" in the title
+# field to stop a downstream consumer's regex from matching the token, without
+# changing how the title renders. Purely a workaround: once that regex is fixed,
+# set TITLE_ORFE_ZWSP=0 and this becomes a no-op.
+ZERO_WIDTH_SPACE = "\u200b"
+ORFE_TOKEN = "ORFE"
+
+
+def orfe_zwsp_enabled(cli_flag: bool = False) -> bool:
+    """Whether to split "ORFE" in titles. Off unless TITLE_ORFE_ZWSP opts in."""
+    if cli_flag:
+        return True
+    return os.getenv("TITLE_ORFE_ZWSP", "0").strip().lower() in {"1", "true", "yes", "on"}
+
+
+def split_orfe_in_titles(events: List[Dict]) -> int:
+    """Insert a zero-width space between the letters of "ORFE" in `title` only.
+
+    Deliberately narrow: it touches no other field, so `series` and
+    `rawEventDetails` keep the plain token and stay matchable. Matching is
+    case-sensitive, since only the exact uppercase token trips the consumer.
+
+    Idempotent -- once split, the literal token is gone, so a second pass finds
+    nothing to do.
+
+    Returns the number of events whose title was changed.
+    """
+    replacement = ZERO_WIDTH_SPACE.join(ORFE_TOKEN)
+    count = 0
+    for ev in events:
+        title = ev.get("title")
+        if not isinstance(title, str) or ORFE_TOKEN not in title:
+            continue
+        ev["title"] = title.replace(ORFE_TOKEN, replacement)
+        count += 1
+    return count
+
+
 def fallback_include_speaker_enabled(cli_flag: bool | None = None) -> bool:
     """Check if fallback titles should include the speaker name.
 

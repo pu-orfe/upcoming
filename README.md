@@ -184,6 +184,7 @@ These environment variables and workflow inputs control behavior at runtime.
 | `ENRICH_DEBUG` | CLI/CI | bool | `false` | Verbose enrichment logging (fetch/skip/overwrite decisions). |
 | `FALLBACK_PREPEND_TEXT` | CLI/CI | string | — | Prefix template for titles filled from `speaker`. Supports `{series}` placeholder and `{a_an}` for automatic A/An selection based on how the next word is *pronounced*; missing keys render empty and whitespace is collapsed. Max length: 128 chars. Example: `{a_an} {series} Talk by` → `An ORFE Colloquium Talk by Alice`. |
 | `FALLBACK_INCLUDE_SPEAKER` | CLI/CI | bool | `true` | Include speaker name in fallback titles. Set to `0` to use only `FALLBACK_PREPEND_TEXT` template (e.g., `A {series} Talk` without speaker). CLI: `--no-fallback-speaker`. |
+| `TITLE_ORFE_ZWSP` | CLI/CI | bool | `false` | Insert a zero-width space (U+200B) between the letters of `ORFE` in the `title` field only. Workaround for a downstream consumer whose regex trips on the token; see [ORFE token in titles](#orfe-token-in-titles). CLI: `--title-orfe-zwsp`. |
 | `BOT_BYPASS_HEADER_VALUE` | CLI/CI | string | `1` | Value sent as `x-wdsoit-bot-bypass` header during enrichment requests. |
 | `ENRICH_CONTENT` | CLI/CI | bool | `false` | Enable content scraping from the event page into `content` (fallback stays as ICS `DESCRIPTION` if not overwritten). |
 | `ENRICH_CONTENT_OVERWRITE` | CLI/CI | bool | `false` | Overwrite non-empty `content` when enriching. |
@@ -218,6 +219,24 @@ You can also provide a JSON config file via `--config` (copy from `transform_con
 CLI flags mirror the envs: `--enrich-titles`, `--enrich-overwrite`, `--enrich-content`, `--enrich-content-overwrite`, `--enrich-raw-details`, `--enrich-raw-details-overwrite`, `--enrich-raw-extracts`.
 `--exclude-series` accepts comma-separated names and can be repeated; it mirrors `EXCLUDE_SERIES`.
 `--no-fallback-speaker` disables including speaker in fallback titles; mirrors `FALLBACK_INCLUDE_SPEAKER=0`.
+
+### ORFE token in titles
+
+A downstream consumer's regex trips on the literal string `ORFE` in `title` — most often via the generated fallback `An ORFE Department Colloquia Talk`. Setting `TITLE_ORFE_ZWSP=1` inserts U+200B ZERO WIDTH SPACE between each letter, so the title still *reads* identically but no longer contains the token:
+
+```
+An ORFE Department Colloquia Talk      ->  An O<U+200B>R<U+200B>F<U+200B>E Department Colloquia Talk
+```
+
+Deliberately narrow, so the workaround does not spread further than it must:
+
+- **`title` only.** `series`, `speaker`, `rawEventDetails` and `urlRef` keep the plain token and stay matchable.
+- **Case-sensitive.** Only the exact uppercase `ORFE` is split; `orfe` in URLs is untouched.
+- **Applied last**, after enrichment and the title fallback, so it catches the token whatever produced it.
+- **Idempotent.** Once split, the literal token is gone, so re-running changes nothing.
+- **Off by default**, so behaviour is unchanged until the repo variable opts in.
+
+This is a stopgap for a consumer-side bug, not a feature. Once that regex is fixed, set `TITLE_ORFE_ZWSP=0` (or delete the variable) and the step becomes a no-op; the code can then be removed with `src/enrich.py`'s `split_orfe_in_titles`, its `tests/test_orfe_zwsp.py`, the CLI flag, and the workflow `env` entries.
 
 `FALLBACK_PREPEND_TEXT` supports two placeholders: `{series}` inserts the event series name, and `{a_an}` auto-selects "A" or "An" (e.g., `{a_an} {series} Talk by` → "An ORFE Colloquium Talk by Alice").
 
