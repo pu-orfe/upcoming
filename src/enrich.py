@@ -11,6 +11,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import List, Dict, Optional
 import os
+import re
 import requests
 from bs4 import BeautifulSoup  # type: ignore
 try:  # optional dependency for Markdown conversion
@@ -519,6 +520,61 @@ def enrichment_overwrite_enabled(cli_flag: bool) -> bool:
     return os.getenv("ENRICH_OVERWRITE", "0") in {"1", "true", "yes", "on"}
 
 
+A_AN_MARKER = "\x00A_AN\x00"
+
+# Letters whose English *names* start with a vowel sound, so an initialism read
+# letter-by-letter takes "an": "an S. S. Wilks seminar" ("ess"), "an FPO" ("ef").
+# The consonant-sound names are B C D G J K P Q T V W Y Z, plus U ("yoo").
+_VOWEL_SOUND_LETTERS = frozenset("AEFHILMNORSX")
+
+# All-caps tokens that are pronounced as words rather than spelled out, so the
+# ordinary word rule applies: ORFE reads "or-fee", hence "an ORFE colloquium".
+_WORD_ACRONYMS = frozenset({"ORFE"})
+
+# Vowel letter, consonant sound: "a university", "a European tour", "a one-off".
+_CONSONANT_SOUND_PREFIXES = (
+    "eu", "ewe", "once", "one", "ubiq", "uk", "ukr", "uni", "ura", "urol",
+    "usa", "use", "usu", "utili", "utop",
+)
+
+# Consonant letter, vowel sound: "an hour", "an honest broker", "an heir".
+_VOWEL_SOUND_PREFIXES = ("heir", "honest", "honor", "honour", "hour")
+
+
+def choose_article(following: str) -> str:
+    """Return "A" or "An" for the word that follows, by sound rather than spelling.
+
+    Spelling alone gets this wrong in both directions: "S. S. Wilks" is read
+    "ess" and takes "an", while "university" is read "yoo" and takes "a".
+    """
+    token = following.strip().split(" ", 1)[0] if following.strip() else ""
+    letters = "".join(ch for ch in token if ch.isalpha())
+    if not letters:
+        return "A"
+
+    # Spelled-out initialisms are judged on the name of their first letter. A
+    # bare single letter always qualifies; so does an all-caps run, unless it is
+    # a known read-as-a-word acronym.
+    spelled_out = len(letters) == 1 or (letters.isupper() and letters not in _WORD_ACRONYMS)
+    if spelled_out:
+        return "An" if letters[0].upper() in _VOWEL_SOUND_LETTERS else "A"
+
+    lowered = letters.lower()
+    if lowered.startswith(_VOWEL_SOUND_PREFIXES):
+        return "An"
+    if lowered.startswith(_CONSONANT_SOUND_PREFIXES):
+        return "A"
+    return "An" if lowered[0] in "aeiou" else "A"
+
+
+def resolve_a_an(text: str) -> str:
+    """Replace {a_an} markers with "A" or "An" based on the following word."""
+    def _replace(match: "re.Match[str]") -> str:
+        return choose_article(text[match.end():])
+
+    return re.sub(re.escape(A_AN_MARKER), _replace, text)
+
+
 def fill_title_fallback(events: List[Dict], overwrite: bool = False, include_speaker: bool = True) -> int:
     """Fill missing/TBD titles using FALLBACK_PREPEND_TEXT and optionally the speaker field.
 
@@ -545,27 +601,10 @@ def fill_title_fallback(events: List[Dict], overwrite: bool = False, include_spe
 
     # Optional prefix for titles derived from speaker. Supports basic placeholders
     # like {series} sourced from the event dict. Missing keys render as empty string.
-    # Special placeholder {a_an} auto-selects "A" or "An" based on next word.
+    # Special placeholder {a_an} auto-selects "A" or "An" by pronunciation.
     class _SafeDict(dict):
         def __missing__(self, key):  # noqa: D401
             return ""
-
-    _A_AN_MARKER = "\x00A_AN\x00"
-
-    def _resolve_a_an(text: str) -> str:
-        """Replace {a_an} markers with 'A' or 'An' based on the following word."""
-        import re
-        def _replace(m: re.Match) -> str:
-            rest = text[m.end():]
-            # Find the next word character
-            next_match = re.match(r"\s*(\w)", rest)
-            if next_match:
-                first_char = next_match.group(1).lower()
-                # Use "An" for vowel sounds (simplified: just vowel letters)
-                if first_char in "aeiou":
-                    return "An"
-            return "A"
-        return re.sub(re.escape(_A_AN_MARKER), _replace, text)
 
     MAX_PREFIX_LEN = 128  # increased from 64 to allow richer templates
     raw_prefix_tmpl = os.getenv("FALLBACK_PREPEND_TEXT", "")
@@ -574,8 +613,8 @@ def fill_title_fallback(events: List[Dict], overwrite: bool = False, include_spe
     def _last_resort_title(ev: Dict) -> str:
         """Series-derived title used when no speaker or template can produce one."""
         series = str(ev.get("series") or "").split(",")[0].strip()
-        text = " ".join(f"{_A_AN_MARKER} {series} Talk".split()) if series else "A Seminar Talk"
-        return _resolve_a_an(text)
+        text = " ".join(f"{A_AN_MARKER} {series} Talk".split()) if series else "A Seminar Talk"
+        return resolve_a_an(text)
 
     count = 0
     for ev in events:
@@ -589,7 +628,7 @@ def fill_title_fallback(events: List[Dict], overwrite: bool = False, include_spe
         prefix_rendered = ""
         if raw_prefix_tmpl:
             # Preserve {a_an} by replacing with marker before format_map
-            tmpl = raw_prefix_tmpl.replace("{a_an}", _A_AN_MARKER)
+            tmpl = raw_prefix_tmpl.replace("{a_an}", A_AN_MARKER)
             try:
                 prefix_rendered = tmpl.format_map(_SafeDict(ev))
             except Exception:
@@ -597,7 +636,7 @@ def fill_title_fallback(events: List[Dict], overwrite: bool = False, include_spe
                 prefix_rendered = tmpl
             prefix_rendered = " ".join(prefix_rendered.split())
             # Resolve A/An based on next word
-            prefix_rendered = _resolve_a_an(prefix_rendered)
+            prefix_rendered = resolve_a_an(prefix_rendered)
 
         speaker = ev.get("speaker") if include_speaker else None
         use_prefix = bool(prefix_rendered) and len(prefix_rendered) < MAX_PREFIX_LEN

@@ -1,5 +1,14 @@
 import os
-from src.enrich import fill_title_fallback, fallback_include_speaker_enabled
+
+import pytest
+
+from src.enrich import (
+    A_AN_MARKER,
+    choose_article,
+    fallback_include_speaker_enabled,
+    fill_title_fallback,
+    resolve_a_an,
+)
 
 
 def test_fill_title_fallback_blank_and_tbd(monkeypatch):
@@ -131,7 +140,8 @@ def test_fill_title_fallback_last_resort_no_speaker_no_template(monkeypatch):
     filled = fill_title_fallback(events, overwrite=False)
     assert filled == 5
     assert events[0]["title"] == "An Optimization Seminar Talk"
-    assert events[1]["title"] == "A S. S. Wilks Memorial Seminar in Statistics Talk"
+    # "S." is read "ess", so the article follows the sound, not the letter.
+    assert events[1]["title"] == "An S. S. Wilks Memorial Seminar in Statistics Talk"
     assert events[2]["title"] == "An Optimization Seminar Talk"
     assert events[3]["title"] == "A Seminar Talk"
     assert events[4]["title"] == "A Seminar Talk"
@@ -195,3 +205,74 @@ def test_fallback_include_speaker_enabled_cli_override(monkeypatch):
     # CLI says include speaker
     monkeypatch.setenv("FALLBACK_INCLUDE_SPEAKER", "0")
     assert fallback_include_speaker_enabled(cli_flag=True) is True
+
+
+@pytest.mark.parametrize(
+    "following,expected",
+    [
+        # Spelled-out initialisms follow the name of the first letter.
+        ("S. S. Wilks Memorial Seminar", "An"),   # "ess"
+        ("FPO", "An"),                            # "ef"
+        ("MIT Colloquium", "An"),                 # "em"
+        ("N. J. Section Meeting", "An"),          # "en"
+        ("X. Y. Lecture", "An"),                  # "ex"
+        ("B. B. Lecture", "A"),                   # "bee"
+        ("CS Seminar", "A"),                      # "see"
+        ("PDE Workshop", "A"),                    # "pee"
+        ("U.S. Policy Seminar", "A"),             # "yoo"
+        ("W. E. B. Lecture", "A"),                # "double-u"
+        # Acronyms read as words fall through to the ordinary word rule.
+        ("ORFE Department Colloquia", "An"),      # "or-fee"
+        # Vowel letter, consonant sound.
+        ("University Seminar", "A"),
+        ("European Finance Seminar", "A"),
+        ("Utility Theory Seminar", "A"),
+        ("One-Day Workshop", "A"),
+        # Consonant letter, vowel sound.
+        ("Hour-Long Seminar", "An"),
+        ("Honest Signals Seminar", "An"),
+        # Ordinary spelling agrees with sound.
+        ("Optimization Seminar", "An"),
+        ("Analysis Seminar", "An"),
+        ("Stochastic Analysis Seminar", "A"),
+        ("Talk", "A"),
+    ],
+)
+def test_choose_article_follows_sound_not_spelling(following, expected):
+    assert choose_article(following) == expected
+
+
+@pytest.mark.parametrize("following", ["", "   ", "123 Seminar", "!!!"])
+def test_choose_article_defaults_to_a_without_letters(following):
+    assert choose_article(following) == "A"
+
+
+def test_resolve_a_an_replaces_every_marker():
+    text = f"{A_AN_MARKER} Optimization Seminar and {A_AN_MARKER} S. S. Wilks Seminar"
+    assert resolve_a_an(text) == "An Optimization Seminar and An S. S. Wilks Seminar"
+
+
+def test_resolve_a_an_leaves_text_without_markers_untouched():
+    assert resolve_a_an("A Stochastic Analysis Seminar Talk") == "A Stochastic Analysis Seminar Talk"
+
+
+def test_live_series_names_get_correct_articles(monkeypatch):
+    """The production template applied to the series seen in the real feed."""
+    monkeypatch.setenv("FALLBACK_PREPEND_TEXT", "{a_an} {series} Talk by")
+    events = [
+        {"guid": "1", "title": "TBD", "series": "S. S. Wilks Distinguished Lecture Series"},
+        {"guid": "2", "title": "TBD", "series": "S. S. Wilks Memorial Seminar in Statistics"},
+        {"guid": "3", "title": "TBD", "series": "ORFE Department Colloquia"},
+        {"guid": "4", "title": "TBD", "series": "Optimization Seminar"},
+        {"guid": "5", "title": "TBD", "series": "Stochastic Analysis and Financial Mathematics Seminar"},
+        {"guid": "6", "title": "TBD", "series": "FPO"},
+    ]
+    fill_title_fallback(events, overwrite=False, include_speaker=False)
+    assert [e["title"] for e in events] == [
+        "An S. S. Wilks Distinguished Lecture Series Talk",
+        "An S. S. Wilks Memorial Seminar in Statistics Talk",
+        "An ORFE Department Colloquia Talk",
+        "An Optimization Seminar Talk",
+        "A Stochastic Analysis and Financial Mathematics Seminar Talk",
+        "An FPO Talk",
+    ]
