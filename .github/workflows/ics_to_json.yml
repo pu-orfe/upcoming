@@ -40,6 +40,7 @@ jobs:
       OUTPUT_FILE: ${{ vars.OUTPUT_FILE }}
       FALLBACK_PREPEND_TEXT: ${{ vars.FALLBACK_PREPEND_TEXT }}
       FALLBACK_INCLUDE_SPEAKER: ${{ vars.FALLBACK_INCLUDE_SPEAKER }}
+      TITLE_ORFE_ZWSP: ${{ vars.TITLE_ORFE_ZWSP }}
       EXCLUDE_SERIES: ${{ vars.EXCLUDE_SERIES }}
       FORCE_REBUILD: ${{ github.event.inputs.force }}
       # Logic for enrichment flag: always on for schedule, respects input for dispatch
