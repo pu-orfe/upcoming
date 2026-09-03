@@ -6,6 +6,7 @@ drift from src/newsletter.py, so this file does two things: it runs the JS suite
 and it asserts the two implementations agree on the same cases.
 """
 import json
+import re
 import shutil
 import subprocess
 from datetime import date
@@ -38,15 +39,32 @@ def test_simulator_asset_exists():
     assert JS_TESTS.is_dir() and list(JS_TESTS.glob("*.test.js"))
 
 
+def js_test_files() -> list[str]:
+    """Explicit file paths, not the directory.
+
+    `node --test <dir>` only works from Node 24; on Node 22 (what the CI runners
+    ship) a bare directory is treated as a module to require and the run dies with
+    MODULE_NOT_FOUND. Explicit files work on every supported version.
+    """
+    return [str(path) for path in sorted(JS_TESTS.glob("*.test.js"))]
+
+
 @requires_node
 def test_javascript_suite_passes():
+    files = js_test_files()
+    assert files, "no JavaScript test files found"
+    # Pin the reporter: the default differs by Node version (22 emits TAP, newer
+    # versions use the spec reporter), and this test parses the summary.
     result = subprocess.run(
-        [node, "--test", str(JS_TESTS)], capture_output=True, text=True,
+        [node, "--test", "--test-reporter=tap", *files], capture_output=True, text=True,
         cwd=REPO_ROOT, timeout=120,
     )
     assert result.returncode == 0, f"node --test failed:\n{result.stdout}\n{result.stderr}"
-    # Assert it actually ran cases, so an empty suite cannot pass as success.
-    assert "# pass 2" in result.stdout or "pass 2" in result.stdout, result.stdout
+    # Assert it actually ran cases, so an empty or skipped suite cannot read as success.
+    match = re.search(r"^# pass (\d+)$", result.stdout, re.MULTILINE)
+    assert match, f"could not find a pass count in node output:\n{result.stdout}"
+    assert int(match.group(1)) >= 20, f"only {match.group(1)} JS assertions ran"
+    assert re.search(r"^# fail 0$", result.stdout, re.MULTILINE), result.stdout
 
 
 def _js_edition(publication_date: str) -> dict:

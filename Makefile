@@ -92,7 +92,8 @@ test:
 # The simulator's core, exercised directly. tests/test_feed_simulator.py also runs
 # this from pytest and cross-checks it against src/newsletter.py.
 test-js:
-	node --test tests/js/
+	# Explicit files, not the directory: `node --test <dir>` needs Node 24+.
+	node --test tests/js/*.test.js
 
 docker-test-build:
 	docker-compose build tests

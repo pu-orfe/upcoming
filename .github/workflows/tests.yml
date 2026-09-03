@@ -23,7 +23,9 @@ jobs:
       - run: pytest -q
       # Run the simulator's suite explicitly too: the pytest bridge skips it when
       # node is absent, and a skip must not be how this coverage disappears.
-      - run: node --test tests/js/
+      # Explicit files, not the directory: `node --test <dir>` needs Node 24+,
+      # and the runners ship Node 22.
+      - run: node --test tests/js/*.test.js
 
   container:
     # Proves the containerized path keeps working, so `make docker-test` cannot rot.
