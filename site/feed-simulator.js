@@ -305,8 +305,8 @@
     // The production page has a single source and no selector; the dev page
     // offers several. Both resolve through feedUrl().
     const sourceEl = $("nfs-source");
-    const weekEl = $("nfs-week");
     const advStateEl = $("nfs-adv-state");
+    const derivedEl = $("nfs-derived");
     const fixedFeed = root.getAttribute("data-feed") || "./events.json";
     const pubDateEl = $("nfs-pubdate");
     const pubTimeEl = $("nfs-pubtime");
@@ -334,29 +334,25 @@
       else statusEl.removeAttribute("data-tone");
     }
 
-    /** Fill every control from the standard schedule for the chosen week. */
-    function applyWeek(dateText) {
-      const d = S.defaultsForWeek(dateText);
-      weekEl.value = d.weekStart;
-      pubDateEl.value = d.publicationDate;
-      pubTimeEl.value = d.publicationTime;
-      deadlineDateEl.value = d.deadlineDate;
-      deadlineTimeEl.value = d.deadlineTime;
+    /** Fill the derived controls from the standard schedule for a publication date. */
+    function applyPublicationDate(dateText) {
+      pubDateEl.value = dateText;
+      pubTimeEl.value = "12:00";
+      deadlineDateEl.value = S.defaultDeadlineDate(dateText);
+      deadlineTimeEl.value = "12:00";
       customised = false;
-      labelWeek();
       markCustomised();
     }
 
-    /** True when the controls no longer match what the chosen week implies. */
-    function divergesFromWeek() {
-      if (!weekEl.value) return false;
+    /** True when a control has been overridden away from the standard schedule. */
+    function divergesFromDefaults() {
+      if (!pubDateEl.value) return false;
       try {
-        const d = S.defaultsForWeek(weekEl.value);
+        const noon = S.normalizeTime("12:00", "12:00:00");
         return (
-          pubDateEl.value !== d.publicationDate ||
-          S.normalizeTime(pubTimeEl.value, "12:00:00") !== S.normalizeTime(d.publicationTime, "12:00:00") ||
-          deadlineDateEl.value !== d.deadlineDate ||
-          S.normalizeTime(deadlineTimeEl.value, "12:00:00") !== S.normalizeTime(d.deadlineTime, "12:00:00")
+          S.normalizeTime(pubTimeEl.value, "12:00:00") !== noon ||
+          deadlineDateEl.value !== S.defaultDeadlineDate(pubDateEl.value) ||
+          S.normalizeTime(deadlineTimeEl.value, "12:00:00") !== noon
         );
       } catch (err) {
         return true;
@@ -366,20 +362,32 @@
     /** Label the Advanced panel when it holds overrides. Never opens it: the panel
      *  stays collapsed until the reader asks for it. */
     function markCustomised() {
-      const diverged = customised && divergesFromWeek();
+      const diverged = customised && divergesFromDefaults();
       if (advStateEl) advStateEl.textContent = diverged ? "· customised" : "";
     }
 
-    function labelWeek() {
-      const target = $("nfs-weekday");
-      if (!target) return;
-      try {
-        target.textContent = weekEl.value
-          ? "Week beginning " + S.weekdayName(weekEl.value) + " " + S.weekStartFor(weekEl.value)
-          : " ";
-      } catch (err) {
-        target.textContent = " ";
+    /** The live readout under the primary control: what the date implies. */
+    function renderDerived(edition, hoursToDeadline) {
+      if (!derivedEl) return;
+      derivedEl.replaceChildren();
+      if (!edition) { derivedEl.hidden = true; return; }
+      derivedEl.hidden = false;
+
+      const overridden = customised && divergesFromDefaults();
+      derivedEl.appendChild(el("span", "nfs-derived-label",
+        overridden ? "Submission deadline (overridden)" : "Submission deadline"));
+      derivedEl.appendChild(el("strong", "nfs-derived-value", prettyStamp(edition.deadlineAt)));
+      if (hoursToDeadline != null) {
+        derivedEl.appendChild(pill(
+          hoursToDeadline >= 0
+            ? "in " + Math.round(hoursToDeadline) + "h"
+            : Math.abs(Math.round(hoursToDeadline)) + "h ago",
+          hoursToDeadline >= 0 ? "good" : "bad"));
       }
+      derivedEl.appendChild(el("span", "nfs-derived-sep", "·"));
+      derivedEl.appendChild(el("span", "nfs-derived-label", "Covers"));
+      derivedEl.appendChild(el("span", "nfs-derived-value",
+        prettyStamp(edition.coverageStart) + " → " + prettyStamp(edition.coverageEnd)));
     }
 
     const QUERY_KEYS = {
@@ -387,15 +395,17 @@
       deadline: deadlineDateEl, deadlinetime: deadlineTimeEl, now: nowEl,
     };
 
-    /** Seed the controls from ?pub=&deadline=... so a view can be linked to. */
+    /** Seed the controls from ?pub=&deadline=... so a view can be linked to.
+     *  Returns the set of keys the link actually carried. */
     function applyQueryState() {
       const params = new URLSearchParams(window.location.search);
+      const seeded = new Set();
       Object.keys(QUERY_KEYS).forEach(function (key) {
         const value = params.get(key);
         if (value == null) return;
         QUERY_KEYS[key].value = value;
+        seeded.add(key);
       });
-      const seeded = Object.keys(QUERY_KEYS).some((k) => params.get(k) != null);
       const feed = params.get("feed");
       if (feed && sourceEl) {
         const match = Array.prototype.find.call(
@@ -466,6 +476,7 @@
         });
       } catch (err) {
         resultsEl.hidden = true;
+        renderDerived(null, null);
         setStatus(err.message, "error");
         return;
       }
@@ -475,6 +486,7 @@
       const phase = nowStamp ? S.phaseAt(nowStamp, edition) : null;
       const hoursToDeadline = nowStamp ? S.hoursBetween(nowStamp, edition.deadlineAt) : null;
 
+      renderDerived(edition, hoursToDeadline);
       renderSummary(edition, result, phase, hoursToDeadline);
       renderRows(result);
       renderExcluded(result);
@@ -610,37 +622,35 @@
     // -- wiring ------------------------------------------------------------
 
     const today = easternToday();
-    applyWeek(nextMonday(today));
+    applyPublicationDate(nextMonday(today));
     nowEl.value = easternNow();
-    if (applyQueryState()) {
-      // A shared link carries exact dates; keep them and show the week they fall in.
-      weekEl.value = S.weekStartFor(pubDateEl.value || nextMonday(today));
-      customised = true;
-      labelWeek();
-      markCustomised();
+    const seeded = applyQueryState();
+    // A link that names a publication date but no deadline gets the derived one,
+    // so "overridden" means genuinely overridden rather than merely left over
+    // from the value the page booted with.
+    if (seeded.has("pub") && !seeded.has("deadline") && pubDateEl.value) {
+      try {
+        deadlineDateEl.value = S.defaultDeadlineDate(pubDateEl.value);
+      } catch (err) { /* invalid date; render() reports it */ }
     }
+    customised = divergesFromDefaults();
+    markCustomised();
     labelWeekday(pubDateEl, "nfs-pubday");
     labelWeekday(deadlineDateEl, "nfs-deadlineday");
-
-    weekEl.addEventListener("change", () => {
-      if (!weekEl.value) return;
-      applyWeek(weekEl.value);
-      labelWeekday(pubDateEl, "nfs-pubday");
-      labelWeekday(deadlineDateEl, "nfs-deadlineday");
-      render();
-    });
 
     // A new publication date re-derives the deadline from it, the same rule the week
     // selector uses. The deadline can then be moved on its own and will stick until
     // the publication date or the week changes again.
+    // The primary control. A new publication date derives the deadline again,
+    // discarding any override, which is what "picking a new date recalculates" means.
     pubDateEl.addEventListener("change", () => {
-      customised = true;
-      if (pubDateEl.value) {
-        try {
-          deadlineDateEl.value = S.defaultDeadlineDate(pubDateEl.value);
-        } catch (err) { /* invalid date; render() reports it */ }
-      }
-      afterAdvancedEdit();
+      if (!pubDateEl.value) return;
+      try {
+        applyPublicationDate(pubDateEl.value);
+      } catch (err) { /* invalid date; render() reports it */ }
+      labelWeekday(pubDateEl, "nfs-pubday");
+      labelWeekday(deadlineDateEl, "nfs-deadlineday");
+      render();
     });
 
     [pubTimeEl, deadlineDateEl, deadlineTimeEl].forEach((node) =>
@@ -661,7 +671,7 @@
 
     const resetBtn = $("nfs-reset");
     if (resetBtn) resetBtn.addEventListener("click", () => {
-      applyWeek(nextMonday(easternToday()));
+      applyPublicationDate(nextMonday(easternToday()));
       nowEl.value = easternNow();
       labelWeekday(pubDateEl, "nfs-pubday");
       labelWeekday(deadlineDateEl, "nfs-deadlineday");

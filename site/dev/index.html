@@ -182,6 +182,33 @@
     }
     #feed-simulator .nfs-linkbtn:hover { color: var(--brand); }
 
+    #feed-simulator .nfs-derived {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 0.45rem 0.6rem;
+      margin: 0 0 1rem;
+      padding: 0.7rem 0.95rem;
+      border-left: 4px solid var(--brand);
+      background: var(--brand-light);
+      font-size: 0.92rem;
+      line-height: 1.4;
+    }
+    #feed-simulator .nfs-derived[hidden] { display: none; }
+    #feed-simulator .nfs-derived-label {
+      font-size: 0.72rem;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--brand-dark);
+      font-weight: 700;
+    }
+    #feed-simulator .nfs-derived-value {
+      font-weight: 600;
+      color: var(--ink-dark);
+      font-variant-numeric: tabular-nums;
+    }
+    #feed-simulator .nfs-derived-sep { color: var(--muted); }
+
     #feed-simulator .nfs-status { margin: 1rem 0; font-size: 0.92rem; }
     #feed-simulator .nfs-status[data-tone="error"] { color: #b3261e; font-weight: 600; }
     #feed-simulator .nfs-status[data-tone="warn"] { color: #8a5300; }
@@ -382,9 +409,9 @@
           </div>
 
           <div class="nfs-field">
-            <label for="nfs-week">Week of</label>
-            <input type="date" id="nfs-week" required>
-            <p class="nfs-hint" id="nfs-weekday">&nbsp;</p>
+            <label for="nfs-pubdate">Target publication date</label>
+            <input type="date" id="nfs-pubdate" required>
+            <p class="nfs-hint" id="nfs-pubday">&nbsp;</p>
           </div>
 
           <div class="nfs-actions">
@@ -392,45 +419,41 @@
           </div>
         </div>
 
+        <p class="nfs-derived" id="nfs-derived" aria-live="polite"></p>
+
         <details class="nfs-advanced" id="nfs-advanced">
           <summary>
             Advanced <span class="nfs-adv-state" id="nfs-adv-state"></span>
           </summary>
           <p class="nfs-hint nfs-adv-intro">
-            Picking a week fills these in from the standard schedule &mdash; published Monday
-            at noon, deadline the Tuesday six days before. Change any of them to model an
-            exception, such as a week that publishes on the Tuesday.
+            The deadline above is derived from the publication date &mdash; the Tuesday of the
+            week before, at noon. Override any of these to model an exception; picking a new
+            publication date derives the deadline again.
           </p>
           <div class="nfs-controls">
-        <div class="nfs-field">
-          <label for="nfs-pubdate">Publication date</label>
-          <input type="date" id="nfs-pubdate" required>
-          <p class="nfs-hint" id="nfs-pubday">&nbsp;</p>
-        </div>
+            <div class="nfs-field">
+              <label for="nfs-pubtime">Publication time</label>
+              <input type="time" id="nfs-pubtime" value="12:00" step="60" required>
+              <p class="nfs-hint">Eastern, as published.</p>
+            </div>
 
-        <div class="nfs-field">
-          <label for="nfs-pubtime">Publication time</label>
-          <input type="time" id="nfs-pubtime" value="12:00" step="60" required>
-          <p class="nfs-hint">Eastern, as published.</p>
-        </div>
+            <div class="nfs-field">
+              <label for="nfs-deadlinedate">Submission deadline date</label>
+              <input type="date" id="nfs-deadlinedate" required>
+              <p class="nfs-hint" id="nfs-deadlineday">&nbsp;</p>
+            </div>
 
-        <div class="nfs-field">
-          <label for="nfs-deadlinedate">Deadline date</label>
-          <input type="date" id="nfs-deadlinedate" required>
-          <p class="nfs-hint" id="nfs-deadlineday">&nbsp;</p>
-        </div>
+            <div class="nfs-field">
+              <label for="nfs-deadlinetime">Submission deadline time</label>
+              <input type="time" id="nfs-deadlinetime" value="12:00" step="60" required>
+              <p class="nfs-hint">Eastern. Late additions go to the editor by email.</p>
+            </div>
 
-        <div class="nfs-field">
-          <label for="nfs-deadlinetime">Deadline time</label>
-          <input type="time" id="nfs-deadlinetime" value="12:00" step="60" required>
-          <p class="nfs-hint">Eastern. Late additions go to the editor by email.</p>
-        </div>
-
-        <div class="nfs-field">
-          <label for="nfs-now">Viewing as of</label>
-          <input type="datetime-local" id="nfs-now" step="60">
-          <p class="nfs-hint">Optional. Sets whether the edition reads as open, closed or published.</p>
-        </div>
+            <div class="nfs-field">
+              <label for="nfs-now">Viewing as of</label>
+              <input type="datetime-local" id="nfs-now" step="60">
+              <p class="nfs-hint">Optional. Sets whether the edition reads as open, closed or published.</p>
+            </div>
           </div>
         </details>
       </form>

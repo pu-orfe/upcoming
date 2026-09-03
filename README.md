@@ -255,15 +255,20 @@ resulting JSON.
 It leads the home page and is linkable at
 [`/#feed-simulator`](https://upcoming.orfe.princeton.edu/#feed-simulator).
 
-One control covers the normal case. Choosing a week fills in the standard schedule —
-published that Monday at noon, deadline the Tuesday six days before — and an **Advanced**
-panel holds the exact publication date/time, deadline date/time and an as-of clock for
-anything that departs from it, such as a week that publishes on the Tuesday.
+One control covers the normal case: **Target publication date**. Everything else follows
+the standard schedule — deadline the Tuesday of the week before at noon, coverage from
+publication day through that week's Sunday — and the derived deadline and coverage window
+are shown immediately beneath the date, so the consequence of a change is visible without
+opening anything.
 
-Deadlines re-derive rather than needing to be kept in step by hand: choosing a week sets
-one, and changing the publication date sets it again from that date's week. Move the
-deadline on its own and it sticks until the publication date or the week changes. Anything
-that departs from the standard schedule marks the panel *customised*.
+Because the date is the publication date rather than a week, an edition that publishes on
+a Tuesday needs no special handling: pick the Tuesday. The window still anchors to that
+week, so Labor Day week reads as edition `2026-09-07` covering Tue 8 – Sun 13 September.
+
+An **Advanced** panel holds the publication time, an overridable deadline date/time, and an
+as-of clock. Picking a new publication date re-derives the deadline; moving the deadline on
+its own sticks until the publication date changes again. An override is labelled
+*overridden* in the readout and marks the panel *customised*.
 
 The headline figures — events in the window, how many still need a title, whether
 submissions are open — stay visible; the derived dates fold into a **Simulated edition
