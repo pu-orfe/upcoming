@@ -322,7 +322,26 @@ def test_orange_buttons_keep_a_readable_hover_label():
 def test_hero_links_are_not_the_dark_brand_colour():
     """--brand-dark on the near-black hero is close to unreadable."""
     html = (SITE_DIR / "index.html").read_text(encoding="utf-8")
-    assert ".hero a { color: var(--brand); }" in html
+    assert ".hero a:not(.btn) { color: var(--brand); }" in html
+
+
+def test_collapsed_accordions_are_forced_hidden():
+    """Author `display` on a <details> child outranks the UA hiding rule in Safari,
+    which renders the panel contents while collapsed. A guard restores it."""
+    for page in (SITE_DIR / "index.html", SITE_DIR / "dev" / "index.html"):
+        html = page.read_text(encoding="utf-8")
+        assert "#feed-simulator details:not([open]) > *:not(summary) { display: none; }" in html, (
+            f"{page.name} lacks the collapsed-accordion guard"
+        )
+
+
+def test_hero_link_colour_does_not_capture_buttons():
+    """`.hero a` outranks `.btn-primary`, so an unscoped rule paints the button
+    label the same orange as its background."""
+    html = (SITE_DIR / "index.html").read_text(encoding="utf-8")
+    assert ".hero a:not(.btn) {" in html
+    assert ".hero a:not(.btn):hover {" in html
+    assert "\n    .hero a {" not in html, "the unscoped rule would capture buttons"
 
 
 def test_simulator_declares_a_default_feed():

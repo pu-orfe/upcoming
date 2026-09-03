@@ -28,9 +28,11 @@
     }
     a { color: var(--brand-dark); text-underline-offset: 0.15rem; }
     a:hover { color: var(--brand); }
-    /* The hero sits on near-black, where --brand-dark is close to unreadable. */
-    .hero a { color: var(--brand); }
-    .hero a:hover { color: var(--brand-light); }
+    /* The hero sits on near-black, where --brand-dark is close to unreadable.
+       Excludes .btn: these selectors outrank the button rules below on specificity
+       and would otherwise repaint an orange button's label orange. */
+    .hero a:not(.btn) { color: var(--brand); }
+    .hero a:not(.btn):hover { color: var(--brand-light); }
     .hero {
       background: linear-gradient(180deg, rgba(18,18,18,0.93), rgba(18,18,18,0.82)),
         radial-gradient(circle at top right, rgba(231,117,0,0.35), transparent 32%);
@@ -379,6 +381,12 @@
     #feed-simulator .nfs-table .nfs-title { font-weight: 600; }
     #feed-simulator .nfs-table .nfs-note { display: block; font-weight: 400; font-size: 0.78rem; color: var(--muted); margin-top: 0.2rem; }
     #feed-simulator .nfs-empty { padding: 1rem 0; color: var(--muted); }
+
+    /* Browsers hide a closed <details>' children with a UA `display: none` rule.
+       Author rules like `.nfs-summary { display: grid }` outrank it in Safari, so
+       the panel contents render while collapsed. This restores the hiding with a
+       selector specific enough to win, whatever display the child sets. */
+    #feed-simulator details:not([open]) > *:not(summary) { display: none; }
 
     #feed-simulator .nfs-details { margin: 0.75rem 0; }
     #feed-simulator .nfs-details summary { cursor: pointer; font-size: 0.9rem; padding: 0.35rem 0; }

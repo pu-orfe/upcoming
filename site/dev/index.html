@@ -259,6 +259,12 @@
     #feed-simulator .nfs-table .nfs-note { display: block; font-weight: 400; font-size: 0.78rem; color: var(--muted); margin-top: 0.2rem; }
     #feed-simulator .nfs-empty { padding: 1rem 0; color: var(--muted); }
 
+    /* Browsers hide a closed <details>' children with a UA `display: none` rule.
+       Author rules like `.nfs-summary { display: grid }` outrank it in Safari, so
+       the panel contents render while collapsed. This restores the hiding with a
+       selector specific enough to win, whatever display the child sets. */
+    #feed-simulator details:not([open]) > *:not(summary) { display: none; }
+
     #feed-simulator .nfs-details { margin: 0.75rem 0; }
     #feed-simulator .nfs-details summary { cursor: pointer; font-size: 0.9rem; padding: 0.35rem 0; }
     #feed-simulator .nfs-json {
