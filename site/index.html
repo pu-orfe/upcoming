@@ -235,6 +235,24 @@
     #feed-simulator .nfs-status[data-tone="error"] { color: #b3261e; font-weight: 600; }
     #feed-simulator .nfs-status[data-tone="warn"] { color: #8a5300; }
 
+    #feed-simulator .nfs-notice {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 0.6rem;
+      margin: 1rem 0 0;
+      padding: 0.9rem 1.1rem;
+      border: 1px solid var(--brand);
+      border-left-width: 4px;
+      border-radius: 6px;
+      background: var(--brand-light);
+      color: var(--ink);
+      font-size: 0.93rem;
+      line-height: 1.5;
+    }
+    #feed-simulator .nfs-notice[hidden] { display: none; }
+    #feed-simulator .nfs-notice strong { color: var(--brand-dark); }
+
     #feed-simulator .nfs-summary {
       display: grid;
       grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr));
@@ -491,11 +509,11 @@
 
         <div class="nfs-actions">
           <button type="button" class="btn btn-primary" id="nfs-reset">Next Monday</button>
-          <button type="button" class="btn btn-outline" id="nfs-labor">Labor Day week</button>
         </div>
       </form>
 
       <p class="nfs-status" id="nfs-status" role="status" aria-live="polite">Loading the feed&hellip;</p>
+      <div class="nfs-notice" id="nfs-notice" role="status" aria-live="polite" hidden></div>
 
       <div id="nfs-results" hidden>
         <dl class="nfs-summary" id="nfs-summary"></dl>

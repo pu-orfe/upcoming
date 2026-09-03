@@ -270,6 +270,12 @@ https://upcoming.orfe.princeton.edu/?pub=2026-09-21&deadline=2026-09-15&now=2026
 
 Query parameters: `pub`, `pubtime`, `deadline`, `deadlinetime`, `now`, `feed`.
 
+One thing to know about the **Feed** selector: `events-newsletter.json` is a pre-filtered
+snapshot of whichever edition was current when it was built, so simulating any *other*
+edition against it correctly returns nothing. The simulator detects that (every record
+carries the same `newsletterEdition`) and says so rather than showing a bare empty table.
+Pick the full feed to explore arbitrary editions.
+
 The logic lives in `site/feed-simulator.js`, shared by both pages and deployed to the Pages
 root by `actions/prepare-pages-artifact`. Its core is exercised by `tests/js/` under
 `node --test`; `tests/test_pipeline_contract.py` asserts that any asset the pages reference is
