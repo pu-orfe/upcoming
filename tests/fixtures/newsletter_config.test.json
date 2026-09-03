@@ -1,0 +1,20 @@
+{
+  "_comment": "Pinned schedule for tests. Never point tests at the live newsletter_config.json: an editor changing the deadline would break CI and the failure would look like a code regression.",
+  "timezone": "America/New_York",
+  "defaults": {
+    "label": "standard",
+    "publication": { "weekday": "MON", "time": "12:00:00" },
+    "deadline":    { "anchor": "week_start", "offset_days": -6, "time": "12:00:00" },
+    "coverage": {
+      "start": { "anchor": "publication", "offset_days": 0, "time": "00:00:00" },
+      "end":   { "anchor": "week_start",  "offset_days": 6, "time": "23:59:59" }
+    },
+    "reminders": { "lead_hours": [72, 48, 24, 4] }
+  },
+  "schedules": [],
+  "exceptions": [
+    { "week_of": "2025-09-01", "publication_date": "2025-09-02", "reason": "Labor Day" }
+  ],
+  "blackouts": [],
+  "max_weeks_lookahead": 60
+}

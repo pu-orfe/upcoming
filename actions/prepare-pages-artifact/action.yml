@@ -25,6 +25,14 @@ inputs:
     description: 'Path to a local events-nofpo.json to publish as /dev/events-nofpo.json (used when dev-events-source is "local")'
     required: false
     default: ''
+  prod-events-newsletter-file:
+    description: 'Path to a local events-newsletter.json to publish as /events-newsletter.json (used when prod-events-source is "local")'
+    required: false
+    default: ''
+  dev-events-newsletter-file:
+    description: 'Path to a local events-newsletter.json to publish as /dev/events-newsletter.json (used when dev-events-source is "local")'
+    required: false
+    default: ''
   github-token:
     description: 'GITHUB_TOKEN for gh release downloads'
     required: true
@@ -45,23 +53,36 @@ runs:
         DEV_SOURCE: ${{ inputs.dev-events-source }}
         DEV_FILE: ${{ inputs.dev-events-file }}
         DEV_NOFPO_FILE: ${{ inputs.dev-events-nofpo-file }}
+        PROD_NEWSLETTER_FILE: ${{ inputs.prod-events-newsletter-file }}
+        DEV_NEWSLETTER_FILE: ${{ inputs.dev-events-newsletter-file }}
       run: |
         set -euo pipefail
         mkdir -p pages pages/dev
         cp site/index.html pages/index.html
         cp site/dev/index.html pages/dev/index.html
+        # Shared by both pages (/dev/ loads it as ../feed-simulator.js), so it is
+        # copied once at the root. tests/test_pipeline_contract.py asserts that
+        # every asset the pages reference is actually deployed.
+        cp site/feed-simulator.js pages/feed-simulator.js
 
         case "${PROD_SOURCE}" in
           local)
-            if [ -z "${PROD_FILE}" ]; then
-              echo "prod-events-source=local but prod-events-file is empty" >&2
+            if [ -z "${PROD_FILE}" ] || [ -z "${PROD_NEWSLETTER_FILE}" ]; then
+              echo "prod-events-source=local requires prod-events-file and prod-events-newsletter-file" >&2
               exit 1
             fi
             cp "${PROD_FILE}" pages/events.json
+            cp "${PROD_NEWSLETTER_FILE}" pages/events-newsletter.json
             ;;
           release)
             if gh release view latest >/dev/null 2>&1; then
               gh release download latest --pattern 'events.json' --dir pages
+              # The whole Pages tree is rebuilt on every deploy, including
+              # landing-page-only runs. Without this the next such run would
+              # delete /events-newsletter.json from the live site. Tolerant of
+              # absence so the first deploy before the asset exists still works.
+              gh release download latest --pattern 'events-newsletter.json' --dir pages \
+                || echo "::warning::latest release has no events-newsletter.json yet; /events-newsletter.json will be absent from this deploy"
             else
               echo "::warning::latest release not found; /events.json will be absent from this deploy"
             fi
@@ -74,16 +95,19 @@ runs:
 
         case "${DEV_SOURCE}" in
           local)
-            if [ -z "${DEV_FILE}" ] || [ -z "${DEV_NOFPO_FILE}" ]; then
-              echo "dev-events-source=local requires dev-events-file and dev-events-nofpo-file" >&2
+            if [ -z "${DEV_FILE}" ] || [ -z "${DEV_NOFPO_FILE}" ] || [ -z "${DEV_NEWSLETTER_FILE}" ]; then
+              echo "dev-events-source=local requires dev-events-file, dev-events-nofpo-file and dev-events-newsletter-file" >&2
               exit 1
             fi
             cp "${DEV_FILE}" pages/dev/events.json
             cp "${DEV_NOFPO_FILE}" pages/dev/events-nofpo.json
+            cp "${DEV_NEWSLETTER_FILE}" pages/dev/events-newsletter.json
             ;;
           release)
             if gh release view dev >/dev/null 2>&1; then
               gh release download dev --pattern 'events.json' --pattern 'events-nofpo.json' --dir pages/dev
+              gh release download dev --pattern 'events-newsletter.json' --dir pages/dev \
+                || echo "::warning::dev release has no events-newsletter.json yet; /dev/events-newsletter.json will be absent from this deploy"
             else
               echo "::warning::dev release not found; /dev/events.json and /dev/events-nofpo.json will be absent from this deploy"
             fi

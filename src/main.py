@@ -8,6 +8,7 @@ serve the file locally via `python -m http.server` can be used if desired.
 from __future__ import annotations
 
 import argparse
+import copy
 import json
 import os
 import sys
@@ -31,6 +32,18 @@ from .enrich import (
     enrichment_raw_details_overwrite_enabled,
     enrich_raw_extracts,
     enrichment_raw_extracts_enabled,
+)
+from .placeholders import ensure_title_provenance, provenance_enabled
+from .newsletter import (
+    Edition,
+    NewsletterConfigError,
+    NoEditionFound,
+    InvalidEventTime,
+    is_in_coverage,
+    load_newsletter_config,
+    parse_as_of,
+    stamp_edition,
+    upcoming_edition,
 )
 
 ICS_URL = os.getenv("ICS_URL", "https://example.com/calendar.ics")
@@ -97,6 +110,22 @@ def _apply_series_exclusions(events: list[dict], exclusions: set[str]) -> tuple[
             continue
         filtered.append(event)
     return filtered, removed
+
+
+def _apply_edition_window(events: list[dict], edition: Edition) -> tuple[list[dict], int]:
+    """Keep only events inside the edition's coverage window.
+
+    Mirrors _apply_series_exclusions: returns (kept, removed) and never mutates
+    either the input list or the event dicts it contains.
+    """
+    kept: list[dict] = []
+    removed = 0
+    for event in events:
+        if is_in_coverage(edition, event):
+            kept.append(event)
+        else:
+            removed += 1
+    return kept, removed
 
 
 def _resolve_series_exclusions(
@@ -169,6 +198,14 @@ def generate_events_json(
     exclusions, _ = _resolve_series_exclusions(extra_values=exclude_series)
     if exclusions:
         data, _ = _apply_series_exclusions(data, exclusions)
+    # The schema requires a non-empty title (minLength: 1) but transform seeds it
+    # empty from TransformConfig.placeholders, so the fallback must run here too --
+    # not only in main(), which is the path the CI workflow happens to use.
+    fill_title_fallback(
+        data, overwrite=False, include_speaker=fallback_include_speaker_enabled()
+    )
+    if provenance_enabled():
+        ensure_title_provenance(data)
     out_path = Path(output_path)
     out_path.write_text(json.dumps(data, indent=2), encoding="utf-8")
     return out_path
@@ -244,6 +281,40 @@ def _parse_args(argv: list[str]) -> argparse.Namespace:
         help="Don't include speaker name in fallback titles; use only FALLBACK_PREPEND_TEXT template (env FALLBACK_INCLUDE_SPEAKER=0)",
     )
     p.add_argument(
+        "--newsletter-output",
+        default=os.getenv("NEWSLETTER_OUTPUT_FILE") or None,
+        help=(
+            "Also write a newsletter variant holding only the events inside the next "
+            "edition's coverage window (env NEWSLETTER_OUTPUT_FILE). Never affects --output."
+        ),
+    )
+    p.add_argument(
+        "--newsletter-config",
+        default=os.getenv("NEWSLETTER_CONFIG_FILE") or None,
+        help="Path to newsletter_config.json (default: newsletter_config.json if present)",
+    )
+    p.add_argument(
+        "--newsletter-edition-output",
+        default=None,
+        help=(
+            "Optional path for a small JSON sidecar describing the resolved edition "
+            "(id, deadline, window, counts). Not published to Pages."
+        ),
+    )
+    p.add_argument(
+        "--as-of",
+        default=None,
+        help=(
+            "ISO-8601 instant used to resolve the newsletter edition. Testing and "
+            "backfill only; never set this in production."
+        ),
+    )
+    p.add_argument(
+        "--no-title-provenance",
+        action="store_true",
+        help="Don't record titleSource/titleIsPlaceholder on events (env TITLE_PROVENANCE=0)",
+    )
+    p.add_argument(
         "--exclude-series",
         action="append",
         default=None,
@@ -278,7 +349,7 @@ def main(argv: list[str] | None = None) -> int:
     do_enrich = enrichment_enabled(ns.enrich_titles)
     overwrite = enrichment_overwrite_enabled(ns.enrich_overwrite)
     if do_enrich:
-        stats = enrich_titles(data, True, overwrite=overwrite)
+        stats = enrich_titles(data, True, overwrite=overwrite, mark_provenance=mark_prov)
         print(
             f"Enriched titles: attempted={stats.attempted} updated={stats.updated} "
             f"errors={stats.errors} overwrite={'true' if overwrite else 'false'}"
@@ -291,10 +362,18 @@ def main(argv: list[str] | None = None) -> int:
     include_speaker = fallback_include_speaker_enabled(
         cli_flag=False if cli_no_speaker else None
     )
-    filled = fill_title_fallback(data, overwrite=False, include_speaker=include_speaker)
+    cli_no_prov = getattr(ns, 'no_title_provenance', False)
+    mark_prov = provenance_enabled(cli_flag=False if cli_no_prov else None)
+    filled = fill_title_fallback(
+        data, overwrite=False, include_speaker=include_speaker, mark_provenance=mark_prov
+    )
     if filled:
         source = "speaker field" if include_speaker else "template"
         print(f"Fallback populated {filled} titles from {source}")
+    if mark_prov:
+        backfilled = ensure_title_provenance(data)
+        if backfilled:
+            print(f"Backfilled title provenance for {backfilled} events")
 
     # Optional content enrichment (independent of title enrichment)
     do_content_enrich = enrichment_content_enabled(ns.enrich_content)
@@ -325,14 +404,81 @@ def main(argv: list[str] | None = None) -> int:
             f"errors={xstats.errors}"
         )
 
+    # --limit is a local-iteration convenience and must never truncate the variant.
+    data_full = list(data)
     if ns.limit is not None:
         data = data[: ns.limit]
     if ns.print_only:
         print(json.dumps(data, indent=2))
+        if ns.newsletter_output:
+            print(
+                "--print-only: skipping newsletter variant write to "
+                f"{ns.newsletter_output}",
+                file=sys.stderr,
+            )
         return 0
     out_path = Path(ns.output)
     out_path.write_text(json.dumps(data, indent=2), encoding="utf-8")
     print(f"Wrote {out_path} ({len(data)} events)")
+
+    # The newsletter variant is written last, and deliberately after the primary
+    # output: if edition resolution fails, events.json is already on disk and the
+    # non-zero exit stops the release step, so the hourly WordPress ingest keeps
+    # consuming the last good feed rather than starving over a config typo.
+    if ns.newsletter_output:
+        rc = _write_newsletter_variant(ns, data_full)
+        if rc:
+            return rc
+    return 0
+
+
+def _write_newsletter_variant(ns: argparse.Namespace, events: list[dict]) -> int:
+    """Write the next edition's slice of `events`. Returns 0, or 4 on config error."""
+    try:
+        config_path = ns.newsletter_config or (
+            "newsletter_config.json" if os.path.exists("newsletter_config.json") else None
+        )
+        nl_cfg = load_newsletter_config(config_path)
+        if ns.as_of:
+            print(
+                f"::warning::--as-of={ns.as_of} in use; the newsletter edition is "
+                "pinned to that instant rather than the live clock",
+                file=sys.stderr,
+            )
+        now = parse_as_of(ns.as_of, nl_cfg)
+        edition = upcoming_edition(nl_cfg, now)
+        in_window, dropped = _apply_edition_window(events, edition)
+    except (NewsletterConfigError, NoEditionFound, InvalidEventTime) as exc:
+        print(f"Newsletter variant generation failed: {exc}", file=sys.stderr)
+        return 4
+
+    # Copy before stamping: the dicts are shared with the primary output, and
+    # _apply_edition_window promises not to mutate them.
+    variant = [copy.copy(ev) for ev in in_window]
+    stamp_edition(variant, edition)
+    placeholders = sum(1 for ev in variant if ev.get("titleIsPlaceholder"))
+
+    nl_path = Path(ns.newsletter_output)
+    nl_path.write_text(json.dumps(variant, indent=2), encoding="utf-8")
+    print(
+        f"Wrote {nl_path} (edition {edition.id}: {len(variant)} events, "
+        f"{dropped} outside window, {placeholders} placeholder titles)"
+    )
+
+    if ns.newsletter_edition_output:
+        sidecar = {
+            "editionId": edition.id,
+            "publicationAt": edition.publication_at.isoformat(),
+            "deadlineAt": edition.deadline_at.isoformat(),
+            "windowStart": edition.coverage_start.isoformat(),
+            "windowEnd": edition.coverage_end.isoformat(),
+            "timezone": edition.timezone,
+            "eventCount": len(variant),
+            "placeholderCount": placeholders,
+        }
+        Path(ns.newsletter_edition_output).write_text(
+            json.dumps(sidecar, indent=2) + "\n", encoding="utf-8"
+        )
     return 0
 
 

@@ -7,3 +7,10 @@ __pycache__/
 .claude/
 # Generated output
 /events.json
+/events-newsletter.json
+/events-nofpo.json
+/newsletter-edition.json
+# Local landing-page preview copies (make serve-site)
+/site/events.json
+/site/events-newsletter.json
+/site/events-nofpo.json

@@ -1,0 +1,83 @@
+name: Newsletter Deadline Watch
+
+# The submission deadline lives in newsletter_config.json, not here. Encoding the
+# weekday and hour in cron would duplicate that schedule somewhere the config
+# cannot reach, and the two would drift invisibly until a deadline was missed.
+# GitHub cron is also UTC-only, so a fixed hour would be wrong for half the year.
+# The cron is therefore deliberately coarse -- hourly -- and
+# src/notify_missing_titles.py decides whether this run is inside a reminder lead
+# window. :05 offsets from the */30 ICS pipeline and the 10,40 feed verifier so
+# the three do not contend.
+
+on:
+  schedule:
+    - cron: '5 * * * *'
+  workflow_dispatch:
+    inputs:
+      as_of:
+        description: 'ISO-8601 instant used to resolve the edition (testing only)'
+        required: false
+        type: string
+      target:
+        description: 'Which edition to report on'
+        required: false
+        default: 'auto'
+        type: choice
+        options: [auto, next-deadline, upcoming]
+      dry_run:
+        description: 'Compute and summarize without creating or editing issues'
+        required: false
+        default: true
+        type: boolean
+      allow_empty_window:
+        description: 'Do not fail when the coverage window contains no events'
+        required: false
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: newsletter-deadline-watch
+  cancel-in-progress: false
+
+jobs:
+  watch:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v7
+
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+
+      # src/notify_missing_titles.py and src/newsletter.py are stdlib-only,
+      # so there is nothing to install.
+      - name: Report events still carrying placeholder titles
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          NEWSLETTER_CONFIG_FILE: newsletter_config.json
+          AS_OF: ${{ github.event.inputs.as_of }}
+          TARGET: ${{ github.event.inputs.target || 'auto' }}
+          DRY_RUN: ${{ github.event.inputs.dry_run == 'true' && '--dry-run' || '' }}
+          ALLOW_EMPTY: ${{ github.event.inputs.allow_empty_window == 'true' && '--allow-empty-window' || '' }}
+        run: |
+          set -euo pipefail
+          python -m src.notify_missing_titles \
+            --repo "${GITHUB_REPOSITORY}" \
+            --source "release:latest:events.json" \
+            --newsletter-config "${NEWSLETTER_CONFIG_FILE}" \
+            --label newsletter-titles \
+            --target "${TARGET}" \
+            --run-url "${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}" \
+            ${AS_OF:+--as-of "$AS_OF"} ${DRY_RUN} ${ALLOW_EMPTY} \
+            | tee -a "$GITHUB_STEP_SUMMARY"
+
+      # Deliberately no update-failure-streak step: a red run here means editors
+      # missed a deadline, which must not be recorded as CI failure or open a
+      # ci-failure issue.

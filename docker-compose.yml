@@ -1,0 +1,32 @@
+# Invoked as `docker-compose` (v1 spelling), so the top-level `version` key stays:
+# Compose v1 reads a file without it as the legacy format, in which top-level keys
+# are service names, and would try to build a service literally called "services".
+# Compose v2 merely warns that the key is obsolete.
+version: "3.8"
+
+services:
+  tests:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    working_dir: /app
+    environment:
+      PYTHONPATH: /app
+      TZ: America/New_York
+    volumes:
+      # Bind-mount the working tree so iterating does not require a rebuild.
+      - .:/app
+    command: pytest -q
+
+  newsletter-example:
+    extends:
+      service: tests
+    # One folded line per shell command: extra indentation inside a `>` block
+    # would be preserved as newlines and break the argument list.
+    command: >
+      sh -c "
+      python -m src.main --ics-url /app/examples/sample_input.example.ics --output /tmp/events.json --newsletter-output /tmp/events-newsletter.json --newsletter-config /app/tests/fixtures/newsletter_config.test.json --newsletter-edition-output /tmp/newsletter-edition.json --as-of 2025-09-05T12:00:00-04:00 &&
+      python tools/validate_json.py --schema schema/events-newsletter.schema.json --data /tmp/events-newsletter.json &&
+      python tools/validate_json.py --schema schema/events.schema.json --data /tmp/events-newsletter.json &&
+      cat /tmp/newsletter-edition.json
+      "

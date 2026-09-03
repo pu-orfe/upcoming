@@ -19,6 +19,8 @@ try:  # optional dependency for Markdown conversion
 except (ImportError, ModuleNotFoundError):  # pragma: no cover - optional
     _md = None  # type: ignore
 
+from .placeholders import TitleSource, is_missing_title, mark_title_source
+
 
 DEFAULT_TIMEOUT = 15
 
@@ -446,7 +448,7 @@ def extract_bio_from_raw_details(raw_html: str) -> str:
     return " ".join(content_parts).strip()
 
 
-def enrich_titles(events: List[Dict], enable: bool, session_cache: Optional[Dict[str, str]] = None, overwrite: bool = False) -> TitleEnrichmentStats:
+def enrich_titles(events: List[Dict], enable: bool, session_cache: Optional[Dict[str, str]] = None, overwrite: bool = False, mark_provenance: bool = True) -> TitleEnrichmentStats:
     """Mutate events list in-place adding subtitle to 'title' when available.
 
     Debugging:
@@ -456,6 +458,7 @@ def enrich_titles(events: List[Dict], enable: bool, session_cache: Optional[Dict
         events: list of event dicts with 'urlRef'.
         enable: if False, no-op.
         session_cache: optional dict for caching url->subtitle.
+        mark_provenance: record titleSource/titleIsPlaceholder on updated events.
     Returns:
         TitleEnrichmentStats summarizing operation.
     """
@@ -497,6 +500,8 @@ def enrich_titles(events: List[Dict], enable: bool, session_cache: Optional[Dict
         should_overwrite = overwrite or existing is None or str(existing).strip() == ""
         if should_overwrite:
             ev["title"] = subtitle
+            if mark_provenance:
+                mark_title_source(ev, TitleSource.ENRICHED)
             stats.updated += 1
             if debug:
                 action = "overwrote" if (existing and overwrite) else "updated"
@@ -575,7 +580,8 @@ def resolve_a_an(text: str) -> str:
     return re.sub(re.escape(A_AN_MARKER), _replace, text)
 
 
-def fill_title_fallback(events: List[Dict], overwrite: bool = False, include_speaker: bool = True) -> int:
+def fill_title_fallback(events: List[Dict], overwrite: bool = False, include_speaker: bool = True,
+                        mark_provenance: bool = True) -> int:
     """Fill missing/TBD titles using FALLBACK_PREPEND_TEXT and optionally the speaker field.
 
     Behavior:
@@ -588,17 +594,12 @@ def fill_title_fallback(events: List[Dict], overwrite: bool = False, include_spe
     - Guarantees a non-empty title: when neither the speaker nor a usable template
       is available, derives a last-resort title from the event's series
       (e.g., "An Optimization Seminar Talk"), or "A Seminar Talk" without a series.
+    - When `mark_provenance` is True (default), records which of those branches
+      produced the title via placeholders.mark_title_source, so consumers can tell
+      a synthesized title from a real one.
 
     Returns the number of events whose title was set.
     """
-    def _is_missing(title_val: object | None) -> bool:
-        if title_val is None:
-            return True
-        s = str(title_val).strip()
-        if not s:
-            return True
-        return s.lower() == "tbd"
-
     # Optional prefix for titles derived from speaker. Supports basic placeholders
     # like {series} sourced from the event dict. Missing keys render as empty string.
     # Special placeholder {a_an} auto-selects "A" or "An" by pronunciation.
@@ -619,7 +620,7 @@ def fill_title_fallback(events: List[Dict], overwrite: bool = False, include_spe
     count = 0
     for ev in events:
         existing = ev.get("title")
-        if not (overwrite or _is_missing(existing)):
+        if not (overwrite or is_missing_title(existing)):
             continue
 
         # Render prefix template with event fields (e.g., {series}) and
@@ -645,6 +646,7 @@ def fill_title_fallback(events: List[Dict], overwrite: bool = False, include_spe
             ev["title"] = (
                 f"{prefix_rendered} {speaker_str}" if use_prefix else speaker_str
             )
+            source = TitleSource.FALLBACK_SPEAKER
         elif use_prefix:
             # No speaker to append: use the template alone, stripping a trailing
             # "by" (case-insensitive) since no name follows.
@@ -652,9 +654,13 @@ def fill_title_fallback(events: List[Dict], overwrite: bool = False, include_spe
             if title.lower().endswith(" by"):
                 title = title[:-3].rstrip()
             ev["title"] = title
+            source = TitleSource.FALLBACK_TEMPLATE
         else:
             # No speaker and no usable template: never leave a title empty.
             ev["title"] = _last_resort_title(ev)
+            source = TitleSource.FALLBACK_SERIES
+        if mark_provenance:
+            mark_title_source(ev, source)
         count += 1
     return count
 

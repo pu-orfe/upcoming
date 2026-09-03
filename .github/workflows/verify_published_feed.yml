@@ -61,8 +61,10 @@ jobs:
             --base-url "${SITE_BASE_URL}" \
             --repo "${GITHUB_REPOSITORY}" \
             --check "events.json=latest:events.json" \
+            --check "events-newsletter.json=latest:events-newsletter.json" \
             --check "dev/events.json=dev:events.json" \
             --check "dev/events-nofpo.json=dev:events-nofpo.json" \
+            --check "dev/events-newsletter.json=dev:events-newsletter.json" \
             --attempts "${{ github.event.inputs.attempts || '3' }}" \
             --interval 30 \
             --grace-minutes "${{ github.event.inputs.grace_minutes || '20' }}" \

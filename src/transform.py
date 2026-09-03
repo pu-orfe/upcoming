@@ -13,6 +13,8 @@ import json
 from pathlib import Path
 import arrow  # type: ignore
 
+from .placeholders import TitleSource, is_missing_title, mark_title_source
+
 
 @dataclass
 class TransformConfig:
@@ -48,6 +50,8 @@ class TransformConfig:
     collapse_whitespace_in_description: bool = True
     # Control newline / fold representation in DESCRIPTION: space | literal_r | newline
     represent_newlines_as: str = "space"
+    # Record titleSource/titleIsPlaceholder when the feed itself supplies a title
+    mark_title_provenance: bool = True
 
 
 def clean_text(value: str, collapse: bool = True) -> str:
@@ -144,6 +148,12 @@ def transform_event(event, cfg: TransformConfig) -> dict:
         if source_field in out:
             out[new_field] = out[source_field]
 
+    # Title provenance: only a title the feed actually supplied counts as 'ics'.
+    # Checked after `copies` so a copies entry that fills `title` is caught too;
+    # the empty placeholder title seeded above is correctly left untagged.
+    if cfg.mark_title_provenance and not is_missing_title(out.get("title")):
+        mark_title_source(out, TitleSource.ICS)
+
     return out
 
 
@@ -169,6 +179,7 @@ def load_config(path: str | os.PathLike | None) -> TransformConfig:
         "masked_fields",
         "placeholders",
         "copies",
+        "mark_title_provenance",
     ]:
         if field_name in data and data[field_name] is not None:
             setattr(cfg, field_name, data[field_name])
