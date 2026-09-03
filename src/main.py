@@ -346,6 +346,10 @@ def main(argv: list[str] | None = None) -> int:
                 file=sys.stderr,
             )
     # Optional enrichment (network I/O) - perform as late as possible just before output
+    # Resolved before the first consumer below: enrich_titles takes it too.
+    cli_no_prov = getattr(ns, 'no_title_provenance', False)
+    mark_prov = provenance_enabled(cli_flag=False if cli_no_prov else None)
+
     do_enrich = enrichment_enabled(ns.enrich_titles)
     overwrite = enrichment_overwrite_enabled(ns.enrich_overwrite)
     if do_enrich:
@@ -362,8 +366,6 @@ def main(argv: list[str] | None = None) -> int:
     include_speaker = fallback_include_speaker_enabled(
         cli_flag=False if cli_no_speaker else None
     )
-    cli_no_prov = getattr(ns, 'no_title_provenance', False)
-    mark_prov = provenance_enabled(cli_flag=False if cli_no_prov else None)
     filled = fill_title_fallback(
         data, overwrite=False, include_speaker=include_speaker, mark_provenance=mark_prov
     )
