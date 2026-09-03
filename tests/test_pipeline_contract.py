@@ -274,6 +274,12 @@ def test_simulator_hides_exact_dates_behind_an_advanced_accordion():
         )
 
 
+def test_simulator_never_force_opens_the_advanced_panel():
+    """It stays collapsed until the reader opens it, even for a customised link."""
+    js = (SITE_DIR / "feed-simulator.js").read_text(encoding="utf-8")
+    assert ".open = true" not in js, "the simulator force-opens the Advanced panel"
+
+
 def test_simulator_declares_a_default_feed():
     """The production page has no selector, so it names its source on the element."""
     html = (SITE_DIR / "index.html").read_text(encoding="utf-8")

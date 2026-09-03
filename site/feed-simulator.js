@@ -306,7 +306,6 @@
     // offers several. Both resolve through feedUrl().
     const sourceEl = $("nfs-source");
     const weekEl = $("nfs-week");
-    const advancedEl = $("nfs-advanced");
     const advStateEl = $("nfs-adv-state");
     const fixedFeed = root.getAttribute("data-feed") || "./events.json";
     const pubDateEl = $("nfs-pubdate");
@@ -363,10 +362,11 @@
       }
     }
 
+    /** Label the Advanced panel when it holds overrides. Never opens it: the panel
+     *  stays collapsed until the reader asks for it. */
     function markCustomised() {
       const diverged = customised && divergesFromWeek();
       if (advStateEl) advStateEl.textContent = diverged ? "· customised" : "";
-      if (advancedEl && diverged) advancedEl.open = true;
     }
 
     function labelWeek() {
