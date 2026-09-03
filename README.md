@@ -246,11 +246,18 @@ submission deadline with it — set `deadline_date` on the exception if you want
 
 ### Feed view simulator
 
-The landing pages embed a simulator so editors can see an edition before it exists. Enter a
-publication date and a submission deadline, and it filters the live feed in the browser and
-renders exactly what the editorial system would ingest: the events in the window, which of
-them still carry a synthesised title, how long remains before the deadline, what falls
-outside the window and why, and the resulting JSON.
+The landing pages embed a simulator so editors can see an edition before it exists. Pick a
+**week** and it filters the live feed in the browser, rendering exactly what the editorial
+system would ingest: the events in the window, which of them still carry a synthesised
+title, how long remains before the deadline, what falls outside the window and why, and the
+resulting JSON.
+
+One control covers the normal case. Choosing a week fills in the standard schedule —
+published that Monday at noon, deadline the Tuesday six days before — and an **Advanced**
+panel holds the exact publication date/time, deadline date/time and an as-of clock for
+anything that departs from it, such as a week that publishes on the Tuesday. Editing any of
+those marks the panel *customised* and stops the week from overwriting them; changing the
+week again resets them.
 
 Two properties matter for trusting what it shows:
 

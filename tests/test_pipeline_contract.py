@@ -249,6 +249,31 @@ def test_simulator_never_offers_the_newsletter_variant_as_a_source():
         )
 
 
+def test_simulator_leads_with_a_week_selector():
+    """The common case is one control; exact dates live behind Advanced."""
+    for page in (SITE_DIR / "index.html", SITE_DIR / "dev" / "index.html"):
+        html = page.read_text(encoding="utf-8")
+        assert 'id="nfs-week"' in html, f"{page.name} has no week selector"
+        primary = re.search(r'<div class="nfs-controls nfs-primary">(.*?)\n        </div>', html, re.S)
+        assert primary, f"{page.name} has no primary control row"
+        assert 'id="nfs-week"' in primary.group(1)
+        # The fiddly controls must not be in the primary row.
+        for field in ("nfs-pubdate", "nfs-pubtime", "nfs-deadlinedate", "nfs-deadlinetime", "nfs-now"):
+            assert field not in primary.group(1), f"{page.name}: {field} should be behind Advanced"
+
+
+def test_simulator_hides_exact_dates_behind_an_advanced_accordion():
+    for page in (SITE_DIR / "index.html", SITE_DIR / "dev" / "index.html"):
+        html = page.read_text(encoding="utf-8")
+        advanced = re.search(r'<details class="nfs-advanced".*?</details>', html, re.S)
+        assert advanced, f"{page.name} has no Advanced accordion"
+        for field in ("nfs-pubdate", "nfs-pubtime", "nfs-deadlinedate", "nfs-deadlinetime", "nfs-now"):
+            assert field in advanced.group(0), f"{page.name}: {field} is not inside Advanced"
+        assert " open" not in advanced.group(0).split(">")[0], (
+            f"{page.name}: Advanced should start collapsed"
+        )
+
+
 def test_simulator_declares_a_default_feed():
     """The production page has no selector, so it names its source on the element."""
     html = (SITE_DIR / "index.html").read_text(encoding="utf-8")

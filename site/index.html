@@ -231,6 +231,31 @@
     }
     #feed-simulator .nfs-actions .btn { font-size: 0.85rem; padding: 0.45rem 0.8rem; cursor: pointer; }
 
+    #feed-simulator .nfs-primary {
+      align-items: end;
+      margin-bottom: 0.5rem;
+    }
+    #feed-simulator .nfs-advanced {
+      margin: 0.25rem 0 0;
+      border-top: 1px solid var(--line);
+      padding-top: 0.75rem;
+    }
+    #feed-simulator .nfs-advanced > summary {
+      cursor: pointer;
+      font-weight: 700;
+      font-size: 0.88rem;
+      color: var(--brand-dark);
+      padding: 0.25rem 0;
+      list-style-position: outside;
+    }
+    #feed-simulator .nfs-advanced > summary:hover { color: var(--brand); }
+    #feed-simulator .nfs-adv-state {
+      font-weight: 400;
+      color: var(--muted);
+    }
+    #feed-simulator .nfs-adv-intro { margin: 0.4rem 0 0.9rem; max-width: 52rem; }
+    #feed-simulator .nfs-advanced .nfs-controls { margin-top: 0; }
+
     #feed-simulator .nfs-status { margin: 1rem 0; font-size: 0.92rem; }
     #feed-simulator .nfs-status[data-tone="error"] { color: #b3261e; font-weight: 600; }
     #feed-simulator .nfs-status[data-tone="warn"] { color: #8a5300; }
@@ -450,7 +475,29 @@
         feed; nothing is sent anywhere and nothing is changed.
       </p>
 
-      <form class="nfs-controls" id="nfs-form" novalidate>
+      <form id="nfs-form" novalidate>
+        <div class="nfs-controls nfs-primary">
+          <div class="nfs-field">
+            <label for="nfs-week">Week of</label>
+            <input type="date" id="nfs-week" required>
+            <p class="nfs-hint" id="nfs-weekday">&nbsp;</p>
+          </div>
+
+          <div class="nfs-actions">
+            <button type="button" class="btn btn-primary" id="nfs-reset">Next edition</button>
+          </div>
+        </div>
+
+        <details class="nfs-advanced" id="nfs-advanced">
+          <summary>
+            Advanced <span class="nfs-adv-state" id="nfs-adv-state"></span>
+          </summary>
+          <p class="nfs-hint nfs-adv-intro">
+            Picking a week fills these in from the standard schedule &mdash; published Monday
+            at noon, deadline the Tuesday six days before. Change any of them to model an
+            exception, such as a week that publishes on the Tuesday.
+          </p>
+          <div class="nfs-controls">
         <div class="nfs-field">
           <label for="nfs-pubdate">Publication date</label>
           <input type="date" id="nfs-pubdate" required>
@@ -480,10 +527,8 @@
           <input type="datetime-local" id="nfs-now" step="60">
           <p class="nfs-hint">Optional. Sets whether the edition reads as open, closed or published.</p>
         </div>
-
-        <div class="nfs-actions">
-          <button type="button" class="btn btn-primary" id="nfs-reset">Next Monday</button>
-        </div>
+          </div>
+        </details>
       </form>
 
       <p class="nfs-status" id="nfs-status" role="status" aria-live="polite">Loading the feed&hellip;</p>

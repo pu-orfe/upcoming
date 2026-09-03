@@ -221,3 +221,43 @@ test("the reported window over the full feed includes the 2026-09-28 talk", () =
   assert.equal(qu.placeholder, false);
   assert.equal(qu.titleSource, "enriched");
 });
+
+test("defaultsForWeek snaps any date to that week's Monday", () => {
+  const wed = S.defaultsForWeek("2026-09-30");
+  assert.deepEqual(wed, {
+    weekStart: "2026-09-28",
+    publicationDate: "2026-09-28",
+    publicationTime: "12:00",
+    deadlineDate: "2026-09-22",
+    deadlineTime: "12:00",
+  });
+  // The Monday itself, and that week's Sunday, give the same answer.
+  assert.deepEqual(S.defaultsForWeek("2026-09-28"), wed);
+  assert.deepEqual(S.defaultsForWeek("2026-10-04"), wed);
+});
+
+test("the week defaults reproduce the standard schedule", () => {
+  const d = S.defaultsForWeek("2026-09-21");
+  assert.equal(S.weekdayName(d.publicationDate), "Monday");
+  assert.equal(S.weekdayName(d.deadlineDate), "Tuesday");
+  const edition = S.resolveEdition(d);
+  assert.equal(edition.id, "2026-09-21");
+  assert.equal(edition.publicationAt, "2026-09-21T12:00:00");
+  assert.equal(edition.deadlineAt, "2026-09-15T12:00:00");
+  assert.equal(edition.shifted, false);
+});
+
+test("overriding publication models a shifted week without changing the edition", () => {
+  // What the Advanced panel is for: Labor Day week publishes on the Tuesday.
+  const d = S.defaultsForWeek("2026-09-07");
+  const shifted = S.resolveEdition(Object.assign({}, d, { publicationDate: "2026-09-08" }));
+  assert.equal(shifted.id, "2026-09-07", "still anchored to the week");
+  assert.equal(shifted.shifted, true);
+  assert.equal(shifted.coverageStart, "2026-09-08T00:00:00");
+  assert.equal(shifted.coverageEnd, "2026-09-13T23:59:59");
+  assert.equal(shifted.deadlineAt, "2026-09-01T12:00:00", "deadline is untouched");
+});
+
+test("defaultsForWeek rejects a malformed date rather than guessing", () => {
+  assert.throws(() => S.defaultsForWeek("not-a-date"), /YYYY-MM-DD/);
+});
