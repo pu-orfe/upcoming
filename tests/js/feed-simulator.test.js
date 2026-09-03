@@ -261,3 +261,21 @@ test("overriding publication models a shifted week without changing the edition"
 test("defaultsForWeek rejects a malformed date rather than guessing", () => {
   assert.throws(() => S.defaultsForWeek("not-a-date"), /YYYY-MM-DD/);
 });
+
+test("a new publication date re-derives the deadline from its week", () => {
+  // The rule the Advanced panel applies when the publication date is edited.
+  assert.equal(S.defaultDeadlineDate("2026-09-28"), "2026-09-22");
+  assert.equal(S.defaultDeadlineDate("2026-09-21"), "2026-09-15");
+  // A publication shifted within its own week keeps that week's deadline, because
+  // the deadline is anchored to the week, not to publication day.
+  assert.equal(S.defaultDeadlineDate("2026-09-07"), "2026-09-01");
+  assert.equal(S.defaultDeadlineDate("2026-09-08"), "2026-09-01");
+});
+
+test("every derived deadline lands on a Tuesday", () => {
+  let monday = "2026-01-05";
+  for (let i = 0; i < 52; i += 1) {
+    assert.equal(S.weekdayName(S.defaultDeadlineDate(monday)), "Tuesday", monday);
+    monday = S.addDays(monday, 7);
+  }
+});

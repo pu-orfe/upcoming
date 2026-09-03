@@ -168,6 +168,20 @@
     #feed-simulator .nfs-adv-intro { margin: 0.4rem 0 0.9rem; max-width: 52rem; }
     #feed-simulator .nfs-advanced .nfs-controls { margin-top: 0; }
 
+    #feed-simulator .nfs-runs-here { margin: -1rem 0 1.5rem; max-width: 52rem; }
+    #feed-simulator .nfs-linkbtn {
+      background: none;
+      border: 0;
+      padding: 0;
+      font: inherit;
+      font-size: 0.85rem;
+      color: var(--brand-dark);
+      text-decoration: underline;
+      text-underline-offset: 0.15rem;
+      cursor: pointer;
+    }
+    #feed-simulator .nfs-linkbtn:hover { color: var(--brand); }
+
     #feed-simulator .nfs-status { margin: 1rem 0; font-size: 0.92rem; }
     #feed-simulator .nfs-status[data-tone="error"] { color: #b3261e; font-weight: 600; }
     #feed-simulator .nfs-status[data-tone="warn"] { color: #8a5300; }
@@ -213,6 +227,15 @@
     #feed-simulator .nfs-pill[data-tone="bad"]       { background: #fadcd9; color: #8c1d18; }
     #feed-simulator .nfs-pill[data-tone="good"]      { background: #d8f2dd; color: #14532d; }
     #feed-simulator .nfs-pill[data-tone="muted"]     { background: var(--brand-light); color: var(--brand-dark); }
+
+    #feed-simulator .nfs-editiondetails { margin: 0 0 1.25rem; }
+    #feed-simulator .nfs-editiondetails > summary {
+      font-weight: 700;
+      font-size: 0.88rem;
+      color: var(--brand-dark);
+    }
+    #feed-simulator .nfs-editiondetails > summary:hover { color: var(--brand); }
+    #feed-simulator .nfs-summary-detail { margin-top: 0.75rem; }
 
     #feed-simulator .nfs-tablewrap { overflow-x: auto; margin: 0 0 1rem; }
     #feed-simulator .nfs-table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
@@ -332,9 +355,12 @@
       </div>
       <p class="lede">
         Pick a publication date and a submission deadline to see exactly which events the
-        editorial system would ingest for that edition &mdash; and which of them still carry a
-        title this pipeline synthesised rather than one a speaker supplied. Everything runs in
-        your browser against the live feed; nothing is sent anywhere and nothing is changed.
+        editorial system would ingest for that edition, and which of them still needs a
+        proper title.
+      </p>
+      <p class="nfs-hint nfs-runs-here">
+        Runs entirely in your browser against the selected feed; nothing is sent anywhere and
+        nothing is changed.
       </p>
 
       <form id="nfs-form" novalidate>
@@ -356,7 +382,7 @@
           </div>
 
           <div class="nfs-actions">
-            <button type="button" class="btn btn-primary" id="nfs-reset">Next edition</button>
+            <button type="button" class="nfs-linkbtn" id="nfs-reset">Reset to the next edition</button>
           </div>
         </div>
 
@@ -407,6 +433,11 @@
 
       <div id="nfs-results" hidden>
         <dl class="nfs-summary" id="nfs-summary"></dl>
+
+        <details class="nfs-details nfs-editiondetails">
+          <summary>Simulated edition details</summary>
+          <dl class="nfs-summary nfs-summary-detail" id="nfs-details-list"></dl>
+        </details>
 
         <div class="nfs-tablewrap">
           <table class="nfs-table">

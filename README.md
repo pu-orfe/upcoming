@@ -252,12 +252,22 @@ system would ingest: the events in the window, which of them still carry a synth
 title, how long remains before the deadline, what falls outside the window and why, and the
 resulting JSON.
 
+It leads the home page and is linkable at
+[`/#feed-simulator`](https://upcoming.orfe.princeton.edu/#feed-simulator).
+
 One control covers the normal case. Choosing a week fills in the standard schedule —
 published that Monday at noon, deadline the Tuesday six days before — and an **Advanced**
 panel holds the exact publication date/time, deadline date/time and an as-of clock for
-anything that departs from it, such as a week that publishes on the Tuesday. Editing any of
-those marks the panel *customised* and stops the week from overwriting them; changing the
-week again resets them.
+anything that departs from it, such as a week that publishes on the Tuesday.
+
+Deadlines re-derive rather than needing to be kept in step by hand: choosing a week sets
+one, and changing the publication date sets it again from that date's week. Move the
+deadline on its own and it sticks until the publication date or the week changes. Anything
+that departs from the standard schedule marks the panel *customised*.
+
+The headline figures — events in the window, how many still need a title, whether
+submissions are open — stay visible; the derived dates fold into a **Simulated edition
+details** accordion.
 
 Two properties matter for trusting what it shows:
 

@@ -280,6 +280,51 @@ def test_simulator_never_force_opens_the_advanced_panel():
     assert ".open = true" not in js, "the simulator force-opens the Advanced panel"
 
 
+def test_edition_details_collapse_by_default():
+    """The headline figures stay visible; the derived dates fold away."""
+    for page in (SITE_DIR / "index.html", SITE_DIR / "dev" / "index.html"):
+        html = page.read_text(encoding="utf-8")
+        block = re.search(r'<details class="nfs-details nfs-editiondetails"([^>]*)>', html)
+        assert block, f"{page.name} has no edition-details accordion"
+        assert "open" not in block.group(1), f"{page.name}: it should start collapsed"
+        assert 'id="nfs-details-list"' in html
+
+
+def test_home_page_leads_with_the_simulator():
+    """It is the main tool, and #feed-simulator must stay a stable deep link."""
+    html = (SITE_DIR / "index.html").read_text(encoding="utf-8")
+    main = html[html.index("<main>"):]
+    ids = re.findall(r'<(?:div|section)[^>]*\bid="([^"]+)"', main)
+    assert ids and ids[0] == "feed-simulator", f"first block in <main> is {ids[:1]}"
+    assert 'id="feed-simulator"' in html
+
+
+def test_hero_leads_with_the_simulator_action():
+    html = (SITE_DIR / "index.html").read_text(encoding="utf-8")
+    actions = re.search(r'<div class="hero-actions">(.*?)</div>', html, re.S).group(1)
+    buttons = re.findall(r'<a class="btn ([a-z-]+)" href="([^"]+)">', actions)
+    assert buttons, "no hero actions found"
+    assert buttons[0] == ("btn-primary", "#feed-simulator"), buttons[0]
+    # Raw-asset links are de-emphasised, never primary.
+    for cls, href in buttons[1:]:
+        assert cls == "btn-quiet", f"{href} should be quiet, got {cls}"
+
+
+def test_orange_buttons_keep_a_readable_hover_label():
+    """The global a:hover rule would otherwise paint orange text on orange."""
+    html = (SITE_DIR / "index.html").read_text(encoding="utf-8")
+    rule = re.search(r'\.btn-primary:hover,\s*\.btn-primary:focus-visible \{(.*?)\}', html, re.S)
+    assert rule, "no hover rule for .btn-primary"
+    assert "color:" in rule.group(1)
+    assert "var(--brand)" not in rule.group(1).split("color:")[1].split(";")[0]
+
+
+def test_hero_links_are_not_the_dark_brand_colour():
+    """--brand-dark on the near-black hero is close to unreadable."""
+    html = (SITE_DIR / "index.html").read_text(encoding="utf-8")
+    assert ".hero a { color: var(--brand); }" in html
+
+
 def test_simulator_declares_a_default_feed():
     """The production page has no selector, so it names its source on the element."""
     html = (SITE_DIR / "index.html").read_text(encoding="utf-8")

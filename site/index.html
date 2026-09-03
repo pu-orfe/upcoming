@@ -28,6 +28,9 @@
     }
     a { color: var(--brand-dark); text-underline-offset: 0.15rem; }
     a:hover { color: var(--brand); }
+    /* The hero sits on near-black, where --brand-dark is close to unreadable. */
+    .hero a { color: var(--brand); }
+    .hero a:hover { color: var(--brand-light); }
     .hero {
       background: linear-gradient(180deg, rgba(18,18,18,0.93), rgba(18,18,18,0.82)),
         radial-gradient(circle at top right, rgba(231,117,0,0.35), transparent 32%);
@@ -53,7 +56,10 @@
       line-height: 1.02;
       letter-spacing: -0.03em;
       font-weight: 700;
-      max-width: 11ch;
+    }
+    /* One line once there is room for it; still wraps on a narrow phone. */
+    @media (min-width: 32rem) {
+      h1 { white-space: nowrap; }
     }
     .hero p {
       max-width: 46rem;
@@ -81,10 +87,37 @@
       background: var(--brand);
       color: var(--ink-dark);
     }
+    /* Without this the global a:hover paints the label orange on orange. */
+    .btn-primary:hover,
+    .btn-primary:focus-visible {
+      background: #ffa04d;
+      color: var(--ink-dark);
+    }
     .btn-secondary {
       background: transparent;
       color: var(--white);
       border-color: rgba(255,255,255,0.35);
+    }
+    .btn-secondary:hover,
+    .btn-secondary:focus-visible {
+      color: var(--white);
+      border-color: var(--brand);
+    }
+    /* Quiet variant for links to raw assets, so the primary action stands out. */
+    .btn-quiet {
+      background: transparent;
+      color: rgba(255,255,255,0.82);
+      border-color: transparent;
+      font-weight: 600;
+      padding-left: 0.35rem;
+      padding-right: 0.35rem;
+      text-decoration: underline;
+      text-decoration-color: rgba(255,255,255,0.35);
+    }
+    .btn-quiet:hover,
+    .btn-quiet:focus-visible {
+      color: var(--white);
+      text-decoration-color: var(--brand);
     }
     main { padding: 2.5rem 1.25rem 4rem; }
     .section-head {
@@ -256,6 +289,20 @@
     #feed-simulator .nfs-adv-intro { margin: 0.4rem 0 0.9rem; max-width: 52rem; }
     #feed-simulator .nfs-advanced .nfs-controls { margin-top: 0; }
 
+    #feed-simulator .nfs-runs-here { margin: -1rem 0 1.5rem; max-width: 52rem; }
+    #feed-simulator .nfs-linkbtn {
+      background: none;
+      border: 0;
+      padding: 0;
+      font: inherit;
+      font-size: 0.85rem;
+      color: var(--brand-dark);
+      text-decoration: underline;
+      text-underline-offset: 0.15rem;
+      cursor: pointer;
+    }
+    #feed-simulator .nfs-linkbtn:hover { color: var(--brand); }
+
     #feed-simulator .nfs-status { margin: 1rem 0; font-size: 0.92rem; }
     #feed-simulator .nfs-status[data-tone="error"] { color: #b3261e; font-weight: 600; }
     #feed-simulator .nfs-status[data-tone="warn"] { color: #8a5300; }
@@ -302,6 +349,15 @@
     #feed-simulator .nfs-pill[data-tone="good"]      { background: #d8f2dd; color: #14532d; }
     #feed-simulator .nfs-pill[data-tone="muted"]     { background: var(--brand-light); color: var(--brand-dark); }
 
+    #feed-simulator .nfs-editiondetails { margin: 0 0 1.25rem; }
+    #feed-simulator .nfs-editiondetails > summary {
+      font-weight: 700;
+      font-size: 0.88rem;
+      color: var(--brand-dark);
+    }
+    #feed-simulator .nfs-editiondetails > summary:hover { color: var(--brand); }
+    #feed-simulator .nfs-summary-detail { margin-top: 0.75rem; }
+
     #feed-simulator .nfs-tablewrap { overflow-x: auto; margin: 0 0 1rem; }
     #feed-simulator .nfs-table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
     #feed-simulator .nfs-table caption {
@@ -343,6 +399,7 @@
     }
     #feed-simulator .btn-outline:hover { border-color: var(--brand); color: var(--brand); }
     #feed-simulator.sim-block { margin-top: 3rem; }
+    main > #feed-simulator.sim-block:first-child { margin-top: 0; }
     #feed-simulator .nfs-table tbody tr:last-child td { border-bottom: none; }
   </style>
 </head>
@@ -355,14 +412,136 @@
         School of Engineering events newsletter and the department pages on the Engineering site.
         Production and development assets are available here for external consumers, integrations, and manual inspection.</p>
       <div class="hero-actions">
-        <a class="btn btn-primary" href="./events.json">Open production feed</a>
-        <a class="btn btn-secondary" href="#feed-simulator">Simulate a newsletter edition</a>
-        <a class="btn btn-secondary" href="./dev/">Browse development assets</a>
+        <a class="btn btn-primary" href="#feed-simulator">Simulate a newsletter edition</a>
+        <a class="btn btn-quiet" href="./events.json">Production feed</a>
+        <a class="btn btn-quiet" href="./events-newsletter.json">Newsletter variant</a>
+        <a class="btn btn-quiet" href="./dev/">Development assets</a>
       </div>
     </div>
   </header>
 
   <main>
+    <div class="container sim-block" id="feed-simulator" data-feed="./events.json">
+      <div class="section-head">
+        <h2>Feed view simulator</h2>
+        <a href="https://github.com/pu-orfe/upcoming#newsletter-variant">How the window is defined</a>
+      </div>
+      <p class="lede">
+        Pick a publication date and a submission deadline to see exactly which events the
+        editorial system would ingest for that edition, and which of them still needs a
+        proper title.
+      </p>
+      <p class="nfs-hint nfs-runs-here">
+        Runs entirely in your browser against <a href="./events.json"><code>events.json</code></a>,
+        the full feed; nothing is sent anywhere and nothing is changed.
+      </p>
+
+      <form id="nfs-form" novalidate>
+        <div class="nfs-controls nfs-primary">
+          <div class="nfs-field">
+            <label for="nfs-week">Week of</label>
+            <input type="date" id="nfs-week" required>
+            <p class="nfs-hint" id="nfs-weekday">&nbsp;</p>
+          </div>
+
+          <div class="nfs-actions">
+            <button type="button" class="nfs-linkbtn" id="nfs-reset">Reset to the next edition</button>
+          </div>
+        </div>
+
+        <details class="nfs-advanced" id="nfs-advanced">
+          <summary>
+            Advanced <span class="nfs-adv-state" id="nfs-adv-state"></span>
+          </summary>
+          <p class="nfs-hint nfs-adv-intro">
+            Picking a week fills these in from the standard schedule &mdash; published Monday
+            at noon, deadline the Tuesday six days before. Change any of them to model an
+            exception, such as a week that publishes on the Tuesday.
+          </p>
+          <div class="nfs-controls">
+        <div class="nfs-field">
+          <label for="nfs-pubdate">Publication date</label>
+          <input type="date" id="nfs-pubdate" required>
+          <p class="nfs-hint" id="nfs-pubday">&nbsp;</p>
+        </div>
+
+        <div class="nfs-field">
+          <label for="nfs-pubtime">Publication time</label>
+          <input type="time" id="nfs-pubtime" value="12:00" step="60" required>
+          <p class="nfs-hint">Eastern, as published.</p>
+        </div>
+
+        <div class="nfs-field">
+          <label for="nfs-deadlinedate">Deadline date</label>
+          <input type="date" id="nfs-deadlinedate" required>
+          <p class="nfs-hint" id="nfs-deadlineday">&nbsp;</p>
+        </div>
+
+        <div class="nfs-field">
+          <label for="nfs-deadlinetime">Deadline time</label>
+          <input type="time" id="nfs-deadlinetime" value="12:00" step="60" required>
+          <p class="nfs-hint">Eastern. Late additions go to the editor by email.</p>
+        </div>
+
+        <div class="nfs-field">
+          <label for="nfs-now">Viewing as of</label>
+          <input type="datetime-local" id="nfs-now" step="60">
+          <p class="nfs-hint">Optional. Sets whether the edition reads as open, closed or published.</p>
+        </div>
+          </div>
+        </details>
+      </form>
+
+      <p class="nfs-status" id="nfs-status" role="status" aria-live="polite">Loading the feed&hellip;</p>
+
+      <div id="nfs-results" hidden>
+        <dl class="nfs-summary" id="nfs-summary"></dl>
+
+        <details class="nfs-details nfs-editiondetails">
+          <summary>Simulated edition details</summary>
+          <dl class="nfs-summary nfs-summary-detail" id="nfs-details-list"></dl>
+        </details>
+
+        <div class="nfs-tablewrap">
+          <table class="nfs-table">
+            <caption id="nfs-caption"></caption>
+            <thead>
+              <tr>
+                <th scope="col">Starts</th>
+                <th scope="col">Title the editors would see</th>
+                <th scope="col">Series</th>
+                <th scope="col">Speaker</th>
+                <th scope="col">Location</th>
+              </tr>
+            </thead>
+            <tbody id="nfs-rows"></tbody>
+          </table>
+        </div>
+
+        <details class="nfs-details" id="nfs-excluded-wrap">
+          <summary><span id="nfs-excluded-count"></span></summary>
+          <div class="nfs-tablewrap">
+            <table class="nfs-table">
+              <thead>
+                <tr>
+                  <th scope="col">Starts</th>
+                  <th scope="col">Title</th>
+                  <th scope="col">Series</th>
+                  <th scope="col">Why it is out</th>
+                </tr>
+              </thead>
+              <tbody id="nfs-excluded-rows"></tbody>
+            </table>
+          </div>
+        </details>
+
+        <details class="nfs-details">
+          <summary>What the editorial system receives for this edition (JSON)</summary>
+          <pre class="nfs-json" id="nfs-json"></pre>
+        </details>
+      </div>
+    </div>
+
     <div class="container">
       <div class="section-head">
         <h2>Available resources</h2>
@@ -459,120 +638,6 @@
             <tr><td><code>cancelled</code>, <code>bannerImage</code>, <code>itemType</code></td><td>Reserved fields the editorial system expects.</td></tr>
           </tbody>
         </table>
-      </div>
-    </div>
-
-    <div class="container sim-block" id="feed-simulator" data-feed="./events.json">
-      <div class="section-head">
-        <h2>Feed view simulator</h2>
-        <a href="https://github.com/pu-orfe/upcoming#newsletter-variant">How the window is defined</a>
-      </div>
-      <p class="lede">
-        Pick a publication date and a submission deadline to see exactly which events the
-        editorial system would ingest for that edition &mdash; and which of them still carry a
-        title this pipeline synthesised rather than one a speaker supplied. Everything runs in
-        your browser against <a href="./events.json"><code>events.json</code></a>, the full
-        feed; nothing is sent anywhere and nothing is changed.
-      </p>
-
-      <form id="nfs-form" novalidate>
-        <div class="nfs-controls nfs-primary">
-          <div class="nfs-field">
-            <label for="nfs-week">Week of</label>
-            <input type="date" id="nfs-week" required>
-            <p class="nfs-hint" id="nfs-weekday">&nbsp;</p>
-          </div>
-
-          <div class="nfs-actions">
-            <button type="button" class="btn btn-primary" id="nfs-reset">Next edition</button>
-          </div>
-        </div>
-
-        <details class="nfs-advanced" id="nfs-advanced">
-          <summary>
-            Advanced <span class="nfs-adv-state" id="nfs-adv-state"></span>
-          </summary>
-          <p class="nfs-hint nfs-adv-intro">
-            Picking a week fills these in from the standard schedule &mdash; published Monday
-            at noon, deadline the Tuesday six days before. Change any of them to model an
-            exception, such as a week that publishes on the Tuesday.
-          </p>
-          <div class="nfs-controls">
-        <div class="nfs-field">
-          <label for="nfs-pubdate">Publication date</label>
-          <input type="date" id="nfs-pubdate" required>
-          <p class="nfs-hint" id="nfs-pubday">&nbsp;</p>
-        </div>
-
-        <div class="nfs-field">
-          <label for="nfs-pubtime">Publication time</label>
-          <input type="time" id="nfs-pubtime" value="12:00" step="60" required>
-          <p class="nfs-hint">Eastern, as published.</p>
-        </div>
-
-        <div class="nfs-field">
-          <label for="nfs-deadlinedate">Deadline date</label>
-          <input type="date" id="nfs-deadlinedate" required>
-          <p class="nfs-hint" id="nfs-deadlineday">&nbsp;</p>
-        </div>
-
-        <div class="nfs-field">
-          <label for="nfs-deadlinetime">Deadline time</label>
-          <input type="time" id="nfs-deadlinetime" value="12:00" step="60" required>
-          <p class="nfs-hint">Eastern. Late additions go to the editor by email.</p>
-        </div>
-
-        <div class="nfs-field">
-          <label for="nfs-now">Viewing as of</label>
-          <input type="datetime-local" id="nfs-now" step="60">
-          <p class="nfs-hint">Optional. Sets whether the edition reads as open, closed or published.</p>
-        </div>
-          </div>
-        </details>
-      </form>
-
-      <p class="nfs-status" id="nfs-status" role="status" aria-live="polite">Loading the feed&hellip;</p>
-
-      <div id="nfs-results" hidden>
-        <dl class="nfs-summary" id="nfs-summary"></dl>
-
-        <div class="nfs-tablewrap">
-          <table class="nfs-table">
-            <caption id="nfs-caption"></caption>
-            <thead>
-              <tr>
-                <th scope="col">Starts</th>
-                <th scope="col">Title the editors would see</th>
-                <th scope="col">Series</th>
-                <th scope="col">Speaker</th>
-                <th scope="col">Location</th>
-              </tr>
-            </thead>
-            <tbody id="nfs-rows"></tbody>
-          </table>
-        </div>
-
-        <details class="nfs-details" id="nfs-excluded-wrap">
-          <summary><span id="nfs-excluded-count"></span></summary>
-          <div class="nfs-tablewrap">
-            <table class="nfs-table">
-              <thead>
-                <tr>
-                  <th scope="col">Starts</th>
-                  <th scope="col">Title</th>
-                  <th scope="col">Series</th>
-                  <th scope="col">Why it is out</th>
-                </tr>
-              </thead>
-              <tbody id="nfs-excluded-rows"></tbody>
-            </table>
-          </div>
-        </details>
-
-        <details class="nfs-details">
-          <summary>What the editorial system receives for this edition (JSON)</summary>
-          <pre class="nfs-json" id="nfs-json"></pre>
-        </details>
       </div>
     </div>
 

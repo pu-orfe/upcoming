@@ -316,6 +316,7 @@
     const statusEl = $("nfs-status");
     const resultsEl = $("nfs-results");
     const summaryEl = $("nfs-summary");
+    const detailsEl = $("nfs-details-list");
     const captionEl = $("nfs-caption");
     const rowsEl = $("nfs-rows");
     const excludedWrapEl = $("nfs-excluded-wrap");
@@ -502,37 +503,42 @@
       setStatus(notes.length ? "Note: " + notes.join("; ") + "." : "", notes.length ? "warn" : null);
     }
 
-    function renderSummary(edition, result, phase, hoursToDeadline) {
-      summaryEl.replaceChildren();
-      const add = (term, value, extra) => {
-        const wrap = document.createElement("div");
-        wrap.appendChild(el("dt", null, term));
-        const dd = el("dd", null, value);
-        if (extra) { dd.appendChild(document.createTextNode(" ")); dd.appendChild(extra); }
-        wrap.appendChild(dd);
-        summaryEl.appendChild(wrap);
-      };
+    function appendEntry(list, term, value, extra) {
+      const wrap = document.createElement("div");
+      wrap.appendChild(el("dt", null, term));
+      const dd = el("dd", null, value);
+      if (extra) { dd.appendChild(document.createTextNode(" ")); dd.appendChild(extra); }
+      wrap.appendChild(dd);
+      list.appendChild(wrap);
+    }
 
-      add("Edition", edition.id,
-        edition.shifted ? pill("shifted", "closed") : null);
-      add("Publishes", prettyStamp(edition.publicationAt));
-      add("Deadline", prettyStamp(edition.deadlineAt),
-        hoursToDeadline == null ? null
-          : pill(hoursToDeadline >= 0
-              ? "in " + Math.round(hoursToDeadline) + "h"
-              : Math.abs(Math.round(hoursToDeadline)) + "h ago",
-            hoursToDeadline >= 0 ? "good" : "bad"));
-      add("Coverage window",
-        prettyStamp(edition.coverageStart) + " → " + prettyStamp(edition.coverageEnd));
-      add("Events the editors receive", String(result.included.length));
-      add("Awaiting a real title", String(result.placeholderCount),
+    function renderSummary(edition, result, phase, hoursToDeadline) {
+      // Headline: what the editor actually wants to know.
+      summaryEl.replaceChildren();
+      appendEntry(summaryEl, "Events the editors receive", String(result.included.length));
+      appendEntry(summaryEl, "Awaiting a real title", String(result.placeholderCount),
         result.included.length === 0
           ? pill("no events", "muted")
           : result.placeholderCount ? pill("needs chasing", "bad") : pill("all set", "good"));
       if (phase) {
         const labels = { open: "Submissions open", closed: "Deadline passed", published: "Published" };
-        add("Status", labels[phase], pill(phase, phase));
+        appendEntry(summaryEl, "Status", labels[phase], pill(phase, phase));
       }
+
+      // Detail: the dates the simulator worked out, folded away by default.
+      if (!detailsEl) return;
+      detailsEl.replaceChildren();
+      appendEntry(detailsEl, "Edition", edition.id,
+        edition.shifted ? pill("shifted", "closed") : null);
+      appendEntry(detailsEl, "Publishes", prettyStamp(edition.publicationAt));
+      appendEntry(detailsEl, "Deadline", prettyStamp(edition.deadlineAt),
+        hoursToDeadline == null ? null
+          : pill(hoursToDeadline >= 0
+              ? "in " + Math.round(hoursToDeadline) + "h"
+              : Math.abs(Math.round(hoursToDeadline)) + "h ago",
+            hoursToDeadline >= 0 ? "good" : "bad"));
+      appendEntry(detailsEl, "Coverage window",
+        prettyStamp(edition.coverageStart) + " → " + prettyStamp(edition.coverageEnd));
     }
 
     function renderRows(result) {
@@ -624,16 +630,32 @@
       render();
     });
 
-    // Any advanced edit overrides the week's defaults until the week changes again.
-    [pubDateEl, pubTimeEl, deadlineDateEl, deadlineTimeEl].forEach((node) =>
+    // A new publication date re-derives the deadline from it, the same rule the week
+    // selector uses. The deadline can then be moved on its own and will stick until
+    // the publication date or the week changes again.
+    pubDateEl.addEventListener("change", () => {
+      customised = true;
+      if (pubDateEl.value) {
+        try {
+          deadlineDateEl.value = S.defaultDeadlineDate(pubDateEl.value);
+        } catch (err) { /* invalid date; render() reports it */ }
+      }
+      afterAdvancedEdit();
+    });
+
+    [pubTimeEl, deadlineDateEl, deadlineTimeEl].forEach((node) =>
       node.addEventListener("change", () => {
         customised = true;
-        labelWeekday(pubDateEl, "nfs-pubday");
-        labelWeekday(deadlineDateEl, "nfs-deadlineday");
-        markCustomised();
-        render();
+        afterAdvancedEdit();
       })
     );
+
+    function afterAdvancedEdit() {
+      labelWeekday(pubDateEl, "nfs-pubday");
+      labelWeekday(deadlineDateEl, "nfs-deadlineday");
+      markCustomised();
+      render();
+    }
     nowEl.addEventListener("change", render);
     if (sourceEl) sourceEl.addEventListener("change", loadFeed);
 
