@@ -117,6 +117,10 @@ class Digest:
     past_deadline: bool
     due_milestone: str | None
     variant_edition: str | None = None
+    #: The edition events-newsletter.json is *expected* to hold -- the next one to
+    #: publish. Not necessarily `edition`: under --target auto or next-deadline this
+    #: digest reports on the edition being submitted for, which is a week later.
+    expected_variant_edition: str | None = None
 
     @property
     def edition_id(self) -> str:
@@ -124,9 +128,9 @@ class Digest:
 
     @property
     def variant_in_sync(self) -> bool | None:
-        if self.variant_edition is None:
+        if self.variant_edition is None or self.expected_variant_edition is None:
             return None
-        return self.variant_edition == self.edition.id
+        return self.variant_edition == self.expected_variant_edition
 
 
 @dataclass(frozen=True)
@@ -334,6 +338,7 @@ def collect_missing(
     now: datetime,
     lead_hours: Sequence[float],
     variant_edition: str | None = None,
+    expected_variant_edition: str | None = None,
 ) -> Digest:
     """Find events in the coverage window whose title is still a placeholder."""
     in_window = filter_events_for_edition(edition, events)
@@ -362,14 +367,16 @@ def collect_missing(
         past_deadline=past,
         due_milestone=milestone,
         variant_edition=variant_edition,
+        expected_variant_edition=expected_variant_edition,
     )
 
 
-def _digest_for(cfg, events, edition, *, now, variant_edition):
+def _digest_for(cfg, events, edition, *, now, variant_edition, expected_variant_edition):
     return collect_missing(
         events, edition, now=now,
         lead_hours=cfg.rule_for(edition.week_start).reminder_lead_hours,
         variant_edition=variant_edition,
+        expected_variant_edition=expected_variant_edition,
     )
 
 
@@ -382,25 +389,24 @@ def select_digest(cfg, events, *, now, target="auto", variant_edition=None) -> D
     contributors are currently submitting for. 'auto' escalates to the former when
     it still has placeholders, because it publishes soonest.
     """
-    if target == "next-deadline":
-        return _digest_for(
-            cfg, events, next_deadline_edition(cfg, now),
-            now=now, variant_edition=variant_edition,
-        )
-    if target == "upcoming":
-        return _digest_for(
-            cfg, events, upcoming_edition(cfg, now),
-            now=now, variant_edition=variant_edition,
-        )
+    publishing_edition = upcoming_edition(cfg, now)
+    # The variant is always built for the next edition to publish, whichever edition
+    # this digest ends up reporting on.
+    common = {
+        "now": now,
+        "variant_edition": variant_edition,
+        "expected_variant_edition": publishing_edition.id,
+    }
 
-    publishing = _digest_for(
-        cfg, events, upcoming_edition(cfg, now), now=now, variant_edition=variant_edition
-    )
+    if target == "next-deadline":
+        return _digest_for(cfg, events, next_deadline_edition(cfg, now), **common)
+    if target == "upcoming":
+        return _digest_for(cfg, events, publishing_edition, **common)
+
+    publishing = _digest_for(cfg, events, publishing_edition, **common)
     if publishing.missing and publishing.past_deadline:
         return publishing
-    return _digest_for(
-        cfg, events, next_deadline_edition(cfg, now), now=now, variant_edition=variant_edition
-    )
+    return _digest_for(cfg, events, next_deadline_edition(cfg, now), **common)
 
 
 # ---------------------------------------------------------------------------
@@ -466,7 +472,11 @@ def render_body(digest: Digest, announced: Iterable[str], *, run_url: str) -> st
         lines.append(f"| Schedule exception | {e.exception_reason} |")
     if digest.variant_edition is not None:
         sync = "in sync" if digest.variant_in_sync else "**out of sync**"
-        lines.append(f"| Published variant edition | `{digest.variant_edition}` ({sync}) |")
+        expected = digest.expected_variant_edition or "?"
+        lines.append(
+            f"| Published variant edition | `{digest.variant_edition}` "
+            f"(expected `{expected}` — {sync}) |"
+        )
     lines.append("")
 
     if digest.missing:
@@ -639,7 +649,11 @@ def render_step_summary(digest: Digest | None, action: Action | None, *, error: 
         lines.append(f"| Failed | {error} |")
     if digest.variant_edition is not None:
         sync = "in sync" if digest.variant_in_sync else "**out of sync**"
-        lines.append(f"| Published variant edition | `{digest.variant_edition}` ({sync}) |")
+        expected = digest.expected_variant_edition or "?"
+        lines.append(
+            f"| Published variant edition | `{digest.variant_edition}` "
+            f"(expected `{expected}` — {sync}) |"
+        )
     lines.append("")
     if digest.missing:
         lines.append("| Start | Series | Speaker | Placeholder title | titleSource |")
@@ -728,8 +742,8 @@ def main(argv: list[str] | None = None, *, transport: Transport | None = None) -
         if digest.variant_in_sync is False:
             print(
                 f"::warning::the published variant was built for edition "
-                f"{digest.variant_edition} but the next deadline belongs to "
-                f"{digest.edition_id}; the variant is stale",
+                f"{digest.variant_edition} but the next edition to publish is "
+                f"{digest.expected_variant_edition}; the variant is stale",
                 file=sys.stderr,
             )
     except (NewsletterConfigError, NoEditionFound, InvalidEventTime, NotifyError) as exc:

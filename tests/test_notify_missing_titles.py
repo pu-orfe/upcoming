@@ -496,6 +496,30 @@ def test_warns_when_published_variant_edition_is_stale(capsys):
     assert "out of sync" in out.out
 
 
+def test_no_stale_warning_when_the_digest_reports_a_later_edition(capsys):
+    """Regression: the variant is built for the next edition to *publish*, while the
+    digest usually reports on the next edition to *close*. Comparing the variant
+    against the reported edition flagged a correct variant as stale on almost every
+    run, which is how a real warning gets trained into background noise."""
+    # as_of 2025-09-05: publishing edition is 2025-09-08, next deadline is 2025-09-15.
+    code, _ = run(
+        release_body="ICS_SHA256:abc NEWSLETTER_EDITION:2025-09-08",
+        as_of="2025-09-05T09:00:00-04:00",
+    )
+    out = capsys.readouterr()
+    assert code in (nmt.EXIT_OK, nmt.EXIT_DEADLINE_MISSED)
+    assert "::warning::" not in out.err, "a correctly built variant was called stale"
+    assert "in sync" in out.out and "out of sync" not in out.out
+
+
+def test_stale_warning_names_the_edition_the_variant_should_hold(capsys):
+    code, _ = run(release_body="ICS_SHA256:abc NEWSLETTER_EDITION:2025-08-25")
+    out = capsys.readouterr()
+    assert "::warning::" in out.err
+    assert "next edition to publish" in out.err
+    assert "expected" in out.out
+
+
 def test_no_stale_warning_when_variant_edition_matches(capsys):
     code, _ = run(release_body=f"ICS_SHA256:abc NEWSLETTER_EDITION:{EDITION_ID}")
     out = capsys.readouterr()
