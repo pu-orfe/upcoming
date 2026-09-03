@@ -236,13 +236,32 @@ def test_simulator_markup_has_no_hardcoded_date_presets():
     assert "nfs-labor" not in js
 
 
-def test_simulator_markup_has_the_scope_notice():
-    """Explains an empty result caused by a pre-scoped feed."""
+def test_simulator_never_offers_the_newsletter_variant_as_a_source():
+    """The variant is the finished artifact for one edition; the simulator previews
+    editions that do not exist yet. Selecting it makes every other edition come back
+    empty, which reads as 'nothing is scheduled'."""
     for page in (SITE_DIR / "index.html", SITE_DIR / "dev" / "index.html"):
         html = page.read_text(encoding="utf-8")
-        assert 'id="nfs-notice"' in html, f"{page.name} is missing the scope notice"
-    js = (SITE_DIR / "feed-simulator.js").read_text(encoding="utf-8")
-    assert "nfs-notice" in js and "feedScope" in js
+        block = re.search(r'<select id="nfs-source">(.*?)</select>', html, re.S)
+        options = re.findall(r'value="([^"]+)"', block.group(1)) if block else []
+        assert not any("events-newsletter" in o for o in options), (
+            f"{page.name} offers the newsletter variant as a simulator source"
+        )
+
+
+def test_simulator_declares_a_default_feed():
+    """The production page has no selector, so it names its source on the element."""
+    html = (SITE_DIR / "index.html").read_text(encoding="utf-8")
+    assert 'id="feed-simulator" data-feed="./events.json"' in html
+    assert 'id="nfs-source"' not in html, "production should have no feed selector"
+
+
+def test_dev_simulator_offers_only_full_feeds():
+    html = (SITE_DIR / "dev" / "index.html").read_text(encoding="utf-8")
+    block = re.search(r'<select id="nfs-source">(.*?)</select>', html, re.S)
+    assert block, "the dev page should keep its selector"
+    options = re.findall(r'value="([^"]+)"', block.group(1))
+    assert options == ["./events.json", "./events-nofpo.json", "./test.json"]
 
 
 def test_simulator_asset_is_self_contained():

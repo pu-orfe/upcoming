@@ -235,24 +235,6 @@
     #feed-simulator .nfs-status[data-tone="error"] { color: #b3261e; font-weight: 600; }
     #feed-simulator .nfs-status[data-tone="warn"] { color: #8a5300; }
 
-    #feed-simulator .nfs-notice {
-      display: flex;
-      flex-wrap: wrap;
-      align-items: center;
-      gap: 0.6rem;
-      margin: 1rem 0 0;
-      padding: 0.9rem 1.1rem;
-      border: 1px solid var(--brand);
-      border-left-width: 4px;
-      border-radius: 6px;
-      background: var(--brand-light);
-      color: var(--ink);
-      font-size: 0.93rem;
-      line-height: 1.5;
-    }
-    #feed-simulator .nfs-notice[hidden] { display: none; }
-    #feed-simulator .nfs-notice strong { color: var(--brand-dark); }
-
     #feed-simulator .nfs-summary {
       display: grid;
       grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr));
@@ -455,7 +437,7 @@
       </div>
     </div>
 
-    <div class="container sim-block" id="feed-simulator">
+    <div class="container sim-block" id="feed-simulator" data-feed="./events.json">
       <div class="section-head">
         <h2>Feed view simulator</h2>
         <a href="https://github.com/pu-orfe/upcoming#newsletter-variant">How the window is defined</a>
@@ -464,19 +446,11 @@
         Pick a publication date and a submission deadline to see exactly which events the
         editorial system would ingest for that edition &mdash; and which of them still carry a
         title this pipeline synthesised rather than one a speaker supplied. Everything runs in
-        your browser against the live feed; nothing is sent anywhere and nothing is changed.
+        your browser against <a href="./events.json"><code>events.json</code></a>, the full
+        feed; nothing is sent anywhere and nothing is changed.
       </p>
 
       <form class="nfs-controls" id="nfs-form" novalidate>
-        <div class="nfs-field">
-          <label for="nfs-source">Feed</label>
-          <select id="nfs-source">
-            <option value="./events.json" selected>Full feed &mdash; events.json</option>
-            <option value="./events-newsletter.json">Newsletter variant &mdash; events-newsletter.json</option>
-          </select>
-          <p class="nfs-hint">The variant is already scoped to the next edition; the full feed shows the filtering at work.</p>
-        </div>
-
         <div class="nfs-field">
           <label for="nfs-pubdate">Publication date</label>
           <input type="date" id="nfs-pubdate" required>
@@ -513,7 +487,6 @@
       </form>
 
       <p class="nfs-status" id="nfs-status" role="status" aria-live="polite">Loading the feed&hellip;</p>
-      <div class="nfs-notice" id="nfs-notice" role="status" aria-live="polite" hidden></div>
 
       <div id="nfs-results" hidden>
         <dl class="nfs-summary" id="nfs-summary"></dl>

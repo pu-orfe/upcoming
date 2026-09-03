@@ -268,13 +268,14 @@ The view is deep-linkable, so a specific edition can be sent to someone:
 https://upcoming.orfe.princeton.edu/?pub=2026-09-21&deadline=2026-09-15&now=2026-09-14T13:00#feed-simulator
 ```
 
-Query parameters: `pub`, `pubtime`, `deadline`, `deadlinetime`, `now`, `feed`.
+Query parameters: `pub`, `pubtime`, `deadline`, `deadlinetime`, `now` (and `feed` on
+`/dev/`, which offers a choice of dev feeds).
 
-One thing to know about the **Feed** selector: `events-newsletter.json` is a pre-filtered
-snapshot of whichever edition was current when it was built, so simulating any *other*
-edition against it correctly returns nothing. The simulator detects that (every record
-carries the same `newsletterEdition`) and says so rather than showing a bare empty table.
-Pick the full feed to explore arbitrary editions.
+**It always reads a full feed, never `events-newsletter.json`.** The variant is the
+finished artifact for one edition; the simulator exists to preview editions that do not
+exist yet. Pointing it at the variant makes every other edition come back empty, which
+reads as "nothing is scheduled", so the variant is simply not offered as a source. The
+production page reads `events.json` and has no selector at all.
 
 The logic lives in `site/feed-simulator.js`, shared by both pages and deployed to the Pages
 root by `actions/prepare-pages-artifact`. Its core is exercised by `tests/js/` under
