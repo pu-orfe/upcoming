@@ -70,6 +70,23 @@
     return addDays(weekStartFor(publicationDate), -6);
   }
 
+  /** The control values a chosen week implies, before any manual override.
+   *
+   * Publication is that week's Monday at noon and the deadline the Tuesday six days
+   * earlier, matching the standard schedule. A week that publishes on a different
+   * day -- Labor Day week -- is expressed by overriding the publication date.
+   */
+  function defaultsForWeek(dateText) {
+    const weekStart = weekStartFor(dateText);
+    return {
+      weekStart: weekStart,
+      publicationDate: weekStart,
+      publicationTime: "12:00",
+      deadlineDate: defaultDeadlineDate(weekStart),
+      deadlineTime: "12:00",
+    };
+  }
+
   /** Resolve one edition. Mirrors newsletter.build_edition's anchor model. */
   function resolveEdition(input) {
     const publicationDate = input.publicationDate;
@@ -180,25 +197,6 @@
     return name || detail || "";
   }
 
-  /** Describe a feed that is already narrowed to a single newsletter edition.
-   *
-   * events-newsletter.json is a pre-filtered snapshot: every record carries the
-   * same `newsletterEdition`. Filtering it by a *different* edition's window
-   * correctly yields nothing, which reads like "no events are scheduled" unless
-   * the caller says otherwise.
-   */
-  function feedScope(events) {
-    const list = events || [];
-    if (!list.length) return { prescoped: false, edition: null };
-    const editions = new Set();
-    for (const event of list) {
-      if (!event || !event.newsletterEdition) return { prescoped: false, edition: null };
-      editions.add(event.newsletterEdition);
-    }
-    if (editions.size !== 1) return { prescoped: false, edition: null };
-    return { prescoped: true, edition: editions.values().next().value };
-  }
-
   /** Split a feed into what WordPress would ingest for this edition, and what it would not. */
   function partition(events, edition) {
     const included = [];
@@ -235,6 +233,7 @@
     weekStartFor: weekStartFor,
     normalizeTime: normalizeTime,
     defaultDeadlineDate: defaultDeadlineDate,
+    defaultsForWeek: defaultsForWeek,
     resolveEdition: resolveEdition,
     inWindow: inWindow,
     placeholderState: placeholderState,
@@ -244,7 +243,6 @@
     formatLocation: formatLocation,
     decorate: decorate,
     partition: partition,
-    feedScope: feedScope,
   };
 });
 
@@ -304,7 +302,13 @@
     if (!root || !S) return;
 
     const $ = (id) => root.querySelector("#" + id);
+    // The production page has a single source and no selector; the dev page
+    // offers several. Both resolve through feedUrl().
     const sourceEl = $("nfs-source");
+    const weekEl = $("nfs-week");
+    const advancedEl = $("nfs-advanced");
+    const advStateEl = $("nfs-adv-state");
+    const fixedFeed = root.getAttribute("data-feed") || "./events.json";
     const pubDateEl = $("nfs-pubdate");
     const pubTimeEl = $("nfs-pubtime");
     const deadlineDateEl = $("nfs-deadlinedate");
@@ -319,13 +323,10 @@
     const excludedCountEl = $("nfs-excluded-count");
     const excludedRowsEl = $("nfs-excluded-rows");
     const jsonEl = $("nfs-json");
-    const noticeEl = $("nfs-notice");
 
     let feed = null;
-    let feedUrl = null;
-    let scope = { prescoped: false, edition: null };
-    // The user may set a deadline by hand; stop re-deriving it once they do.
-    let deadlinePinned = false;
+    // Once any advanced field is edited by hand, stop re-deriving it from the week.
+    let customised = false;
 
     function setStatus(text, tone) {
       statusEl.textContent = text;
@@ -333,23 +334,55 @@
       else statusEl.removeAttribute("data-tone");
     }
 
-    function applyDefaults(publicationDate) {
-      pubDateEl.value = publicationDate;
-      pubTimeEl.value = "12:00";
-      deadlineDateEl.value = S.defaultDeadlineDate(publicationDate);
-      deadlineTimeEl.value = "12:00";
-      deadlinePinned = false;
+    /** Fill every control from the standard schedule for the chosen week. */
+    function applyWeek(dateText) {
+      const d = S.defaultsForWeek(dateText);
+      weekEl.value = d.weekStart;
+      pubDateEl.value = d.publicationDate;
+      pubTimeEl.value = d.publicationTime;
+      deadlineDateEl.value = d.deadlineDate;
+      deadlineTimeEl.value = d.deadlineTime;
+      customised = false;
+      labelWeek();
+      markCustomised();
     }
 
-    function syncDerivedDeadline() {
-      if (deadlinePinned || !pubDateEl.value) return;
+    /** True when the controls no longer match what the chosen week implies. */
+    function divergesFromWeek() {
+      if (!weekEl.value) return false;
       try {
-        deadlineDateEl.value = S.defaultDeadlineDate(pubDateEl.value);
-      } catch (err) { /* invalid date; render() reports it */ }
+        const d = S.defaultsForWeek(weekEl.value);
+        return (
+          pubDateEl.value !== d.publicationDate ||
+          S.normalizeTime(pubTimeEl.value, "12:00:00") !== S.normalizeTime(d.publicationTime, "12:00:00") ||
+          deadlineDateEl.value !== d.deadlineDate ||
+          S.normalizeTime(deadlineTimeEl.value, "12:00:00") !== S.normalizeTime(d.deadlineTime, "12:00:00")
+        );
+      } catch (err) {
+        return true;
+      }
+    }
+
+    function markCustomised() {
+      const diverged = customised && divergesFromWeek();
+      if (advStateEl) advStateEl.textContent = diverged ? "· customised" : "";
+      if (advancedEl && diverged) advancedEl.open = true;
+    }
+
+    function labelWeek() {
+      const target = $("nfs-weekday");
+      if (!target) return;
+      try {
+        target.textContent = weekEl.value
+          ? "Week beginning " + S.weekdayName(weekEl.value) + " " + S.weekStartFor(weekEl.value)
+          : " ";
+      } catch (err) {
+        target.textContent = " ";
+      }
     }
 
     const QUERY_KEYS = {
-      feed: sourceEl, pub: pubDateEl, pubtime: pubTimeEl,
+      pub: pubDateEl, pubtime: pubTimeEl,
       deadline: deadlineDateEl, deadlinetime: deadlineTimeEl, now: nowEl,
     };
 
@@ -359,16 +392,17 @@
       Object.keys(QUERY_KEYS).forEach(function (key) {
         const value = params.get(key);
         if (value == null) return;
-        if (key === "feed") {
-          const match = Array.prototype.find.call(
-            sourceEl.options, (o) => o.value === value || o.value.endsWith("/" + value)
-          );
-          if (match) sourceEl.value = match.value;
-          return;
-        }
         QUERY_KEYS[key].value = value;
-        if (key === "deadline") deadlinePinned = true;
       });
+      const seeded = Object.keys(QUERY_KEYS).some((k) => params.get(k) != null);
+      const feed = params.get("feed");
+      if (feed && sourceEl) {
+        const match = Array.prototype.find.call(
+          sourceEl.options, (o) => o.value === feed || o.value.endsWith("/" + feed)
+        );
+        if (match) sourceEl.value = match.value;
+      }
+      return seeded;
     }
 
     /** Reflect the current view in the address bar so it can be shared. */
@@ -380,7 +414,7 @@
       params.set("deadline", deadlineDateEl.value);
       params.set("deadlinetime", deadlineTimeEl.value);
       if (nowEl.value) params.set("now", nowEl.value);
-      if (sourceEl.selectedIndex > 0) {
+      if (sourceEl && sourceEl.selectedIndex > 0) {
         params.set("feed", sourceEl.value.replace(/^\.\//, ""));
       }
       window.history.replaceState(null, "", "?" + params.toString() + "#feed-simulator");
@@ -396,11 +430,13 @@
       }
     }
 
+    function feedUrl() {
+      return sourceEl ? sourceEl.value : fixedFeed;
+    }
+
     async function loadFeed() {
-      const url = sourceEl.value;
-      feedUrl = url;
+      const url = feedUrl();
       feed = null;
-      scope = { prescoped: false, edition: null };
       setStatus("Loading " + url + "…");
       try {
         const response = await fetch(url, { cache: "no-store" });
@@ -408,15 +444,10 @@
         const data = await response.json();
         if (!Array.isArray(data)) throw new Error("expected a JSON array of events");
         feed = data;
-        scope = S.feedScope(data);
         setStatus("");
       } catch (err) {
         resultsEl.hidden = true;
-        setStatus(
-          "Could not load " + url + " (" + err.message + "). " +
-          "If this is the newsletter variant, it may not have been published yet.",
-          "error"
-        );
+        setStatus("Could not load " + url + " (" + err.message + ").", "error");
       }
       render();
     }
@@ -455,13 +486,6 @@
 
       resultsEl.hidden = false;
       syncQueryState();
-
-      // The commonest way to get a confusing empty result: the newsletter variant
-      // is selected, which only ever holds one edition, and the dates describe a
-      // different one. Say that plainly instead of showing a bare empty table.
-      const mismatched = scope.prescoped && scope.edition !== edition.id;
-      renderScopeNotice(mismatched ? scope.edition : null, edition, result);
-
       const notes = [];
       if (result.malformed.length) {
         notes.push(
@@ -476,29 +500,6 @@
         );
       }
       setStatus(notes.length ? "Note: " + notes.join("; ") + "." : "", notes.length ? "warn" : null);
-    }
-
-    function renderScopeNotice(feedEdition, edition, result) {
-      noticeEl.replaceChildren();
-      noticeEl.hidden = feedEdition === null;
-      if (feedEdition === null) return;
-
-      noticeEl.appendChild(el("strong", null,
-        "This feed only contains edition " + feedEdition + "."));
-      noticeEl.appendChild(document.createTextNode(
-        " " + sourceEl.options[sourceEl.selectedIndex].text.replace(/\s+—.*$/, "") +
-        " is a pre-filtered snapshot of whichever edition was current when it was" +
-        " built, so it holds no events for edition " + edition.id +
-        (result.included.length ? "" : " — which is why the list below is empty") +
-        ". Switch to the full feed to explore any other edition."
-      ));
-      const button = el("button", "btn btn-primary", "Use the full feed");
-      button.type = "button";
-      button.addEventListener("click", function () {
-        sourceEl.selectedIndex = 0;
-        loadFeed();
-      });
-      noticeEl.appendChild(button);
     }
 
     function renderSummary(edition, result, phase, hoursToDeadline) {
@@ -543,12 +544,9 @@
       if (!result.included.length) {
         const row = document.createElement("tr");
         const cell = el("td", "nfs-empty",
-          scope.prescoped
-            ? "No events fall inside this coverage window, because this feed only " +
-              "holds edition " + scope.edition + ". See the note above."
-            : "No events in the selected feed start inside this coverage window. " +
-              "On a normal teaching week that usually means the dates are wrong " +
-              "rather than the calendar being empty.");
+          "No events in the feed start inside this coverage window. On a normal " +
+          "teaching week that usually means the dates are wrong rather than the " +
+          "calendar being empty.");
         cell.colSpan = 5;
         row.appendChild(cell);
         rowsEl.appendChild(row);
@@ -606,31 +604,42 @@
     // -- wiring ------------------------------------------------------------
 
     const today = easternToday();
-    applyDefaults(nextMonday(today));
+    applyWeek(nextMonday(today));
     nowEl.value = easternNow();
-    applyQueryState();
+    if (applyQueryState()) {
+      // A shared link carries exact dates; keep them and show the week they fall in.
+      weekEl.value = S.weekStartFor(pubDateEl.value || nextMonday(today));
+      customised = true;
+      labelWeek();
+      markCustomised();
+    }
     labelWeekday(pubDateEl, "nfs-pubday");
     labelWeekday(deadlineDateEl, "nfs-deadlineday");
 
-    pubDateEl.addEventListener("change", () => {
-      syncDerivedDeadline();
+    weekEl.addEventListener("change", () => {
+      if (!weekEl.value) return;
+      applyWeek(weekEl.value);
       labelWeekday(pubDateEl, "nfs-pubday");
       labelWeekday(deadlineDateEl, "nfs-deadlineday");
       render();
     });
-    deadlineDateEl.addEventListener("change", () => {
-      deadlinePinned = true;
-      labelWeekday(deadlineDateEl, "nfs-deadlineday");
-      render();
-    });
-    [pubTimeEl, deadlineTimeEl, nowEl].forEach((node) =>
-      node.addEventListener("change", render)
+
+    // Any advanced edit overrides the week's defaults until the week changes again.
+    [pubDateEl, pubTimeEl, deadlineDateEl, deadlineTimeEl].forEach((node) =>
+      node.addEventListener("change", () => {
+        customised = true;
+        labelWeekday(pubDateEl, "nfs-pubday");
+        labelWeekday(deadlineDateEl, "nfs-deadlineday");
+        markCustomised();
+        render();
+      })
     );
-    sourceEl.addEventListener("change", loadFeed);
+    nowEl.addEventListener("change", render);
+    if (sourceEl) sourceEl.addEventListener("change", loadFeed);
 
     const resetBtn = $("nfs-reset");
     if (resetBtn) resetBtn.addEventListener("click", () => {
-      applyDefaults(nextMonday(easternToday()));
+      applyWeek(nextMonday(easternToday()));
       nowEl.value = easternNow();
       labelWeekday(pubDateEl, "nfs-pubday");
       labelWeekday(deadlineDateEl, "nfs-deadlineday");

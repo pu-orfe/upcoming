@@ -246,11 +246,18 @@ submission deadline with it — set `deadline_date` on the exception if you want
 
 ### Feed view simulator
 
-The landing pages embed a simulator so editors can see an edition before it exists. Enter a
-publication date and a submission deadline, and it filters the live feed in the browser and
-renders exactly what the editorial system would ingest: the events in the window, which of
-them still carry a synthesised title, how long remains before the deadline, what falls
-outside the window and why, and the resulting JSON.
+The landing pages embed a simulator so editors can see an edition before it exists. Pick a
+**week** and it filters the live feed in the browser, rendering exactly what the editorial
+system would ingest: the events in the window, which of them still carry a synthesised
+title, how long remains before the deadline, what falls outside the window and why, and the
+resulting JSON.
+
+One control covers the normal case. Choosing a week fills in the standard schedule —
+published that Monday at noon, deadline the Tuesday six days before — and an **Advanced**
+panel holds the exact publication date/time, deadline date/time and an as-of clock for
+anything that departs from it, such as a week that publishes on the Tuesday. Editing any of
+those marks the panel *customised* and stops the week from overwriting them; changing the
+week again resets them.
 
 Two properties matter for trusting what it shows:
 
@@ -268,13 +275,14 @@ The view is deep-linkable, so a specific edition can be sent to someone:
 https://upcoming.orfe.princeton.edu/?pub=2026-09-21&deadline=2026-09-15&now=2026-09-14T13:00#feed-simulator
 ```
 
-Query parameters: `pub`, `pubtime`, `deadline`, `deadlinetime`, `now`, `feed`.
+Query parameters: `pub`, `pubtime`, `deadline`, `deadlinetime`, `now` (and `feed` on
+`/dev/`, which offers a choice of dev feeds).
 
-One thing to know about the **Feed** selector: `events-newsletter.json` is a pre-filtered
-snapshot of whichever edition was current when it was built, so simulating any *other*
-edition against it correctly returns nothing. The simulator detects that (every record
-carries the same `newsletterEdition`) and says so rather than showing a bare empty table.
-Pick the full feed to explore arbitrary editions.
+**It always reads a full feed, never `events-newsletter.json`.** The variant is the
+finished artifact for one edition; the simulator exists to preview editions that do not
+exist yet. Pointing it at the variant makes every other edition come back empty, which
+reads as "nothing is scheduled", so the variant is simply not offered as a source. The
+production page reads `events.json` and has no selector at all.
 
 The logic lives in `site/feed-simulator.js`, shared by both pages and deployed to the Pages
 root by `actions/prepare-pages-artifact`. Its core is exercised by `tests/js/` under

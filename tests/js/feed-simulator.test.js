@@ -198,62 +198,10 @@ test("a Sunday publication yields a valid single-day window", () => {
   assert.equal(S.inWindow("2026-09-26T18:00:00", e), false);
 });
 
-test("a pre-scoped feed is recognised by its uniform newsletterEdition", () => {
-  const variant = [
-    { guid: "a", startTime: "2026-09-08T12:15:00", newsletterEdition: "2026-09-07" },
-    { guid: "b", startTime: "2026-09-09T16:30:00", newsletterEdition: "2026-09-07" },
-  ];
-  assert.deepEqual(S.feedScope(variant), { prescoped: true, edition: "2026-09-07" });
-});
-
-test("the full feed is not treated as pre-scoped", () => {
-  assert.deepEqual(
-    S.feedScope([{ guid: "a", startTime: "2026-09-08T12:15:00" }]),
-    { prescoped: false, edition: null }
-  );
-  // A single untagged record is enough to disqualify it.
-  assert.deepEqual(
-    S.feedScope([
-      { guid: "a", newsletterEdition: "2026-09-07" },
-      { guid: "b" },
-    ]),
-    { prescoped: false, edition: null }
-  );
-});
-
-test("a feed spanning several editions is not pre-scoped", () => {
-  assert.deepEqual(
-    S.feedScope([
-      { guid: "a", newsletterEdition: "2026-09-07" },
-      { guid: "b", newsletterEdition: "2026-09-14" },
-    ]),
-    { prescoped: false, edition: null }
-  );
-});
-
-test("an empty feed is not reported as pre-scoped", () => {
-  assert.deepEqual(S.feedScope([]), { prescoped: false, edition: null });
-  assert.deepEqual(S.feedScope(null), { prescoped: false, edition: null });
-});
-
-test("the reported empty-window case: the variant holds a different edition", () => {
-  // Reproduces the confusing result: publication 2026-09-28 against a variant
-  // built for edition 2026-09-07 yields nothing, and the scope is what explains it.
-  const variant = [
-    { guid: "a", startTime: "2026-09-08T12:15:00", newsletterEdition: "2026-09-07" },
-    { guid: "b", startTime: "2026-09-09T16:30:00", newsletterEdition: "2026-09-07" },
-  ];
-  const edition = S.resolveEdition({
-    publicationDate: "2026-09-28", publicationTime: "10:55", deadlineDate: "2026-09-22",
-  });
-  assert.equal(edition.id, "2026-09-28");
-  assert.equal(S.partition(variant, edition).included.length, 0);
-  const scope = S.feedScope(variant);
-  assert.equal(scope.prescoped, true);
-  assert.notEqual(scope.edition, edition.id);
-});
-
-test("the same window over the full feed does include the 2026-09-28 talk", () => {
+test("the reported window over the full feed includes the 2026-09-28 talk", () => {
+  // Reported from the live site: publication 2026-09-28 10:55 with a 2026-09-22
+  // deadline appeared to find nothing. The window was right; the simulator had
+  // been pointed at the pre-scoped variant. It now only ever reads a full feed.
   const full = [
     { guid: "wilks", startTime: "2026-09-28T12:15:00", title: "Transfer Treatment Effects",
       titleIsPlaceholder: false, titleSource: "enriched", speaker: "Annie Qu" },
@@ -264,8 +212,52 @@ test("the same window over the full feed does include the 2026-09-28 talk", () =
   const edition = S.resolveEdition({
     publicationDate: "2026-09-28", publicationTime: "10:55", deadlineDate: "2026-09-22",
   });
+  assert.equal(edition.coverageStart, "2026-09-28T00:00:00");
+  assert.equal(edition.coverageEnd, "2026-10-04T23:59:59");
   const result = S.partition(full, edition);
   assert.deepEqual(result.included.map((i) => i.guid), ["wilks", "colloq"]);
-  assert.equal(result.placeholderCount, 1);
-  assert.equal(S.feedScope(full).prescoped, false);
+  assert.equal(result.placeholderCount, 1, "only the colloquium awaits a title");
+  const [qu] = result.included;
+  assert.equal(qu.placeholder, false);
+  assert.equal(qu.titleSource, "enriched");
+});
+
+test("defaultsForWeek snaps any date to that week's Monday", () => {
+  const wed = S.defaultsForWeek("2026-09-30");
+  assert.deepEqual(wed, {
+    weekStart: "2026-09-28",
+    publicationDate: "2026-09-28",
+    publicationTime: "12:00",
+    deadlineDate: "2026-09-22",
+    deadlineTime: "12:00",
+  });
+  // The Monday itself, and that week's Sunday, give the same answer.
+  assert.deepEqual(S.defaultsForWeek("2026-09-28"), wed);
+  assert.deepEqual(S.defaultsForWeek("2026-10-04"), wed);
+});
+
+test("the week defaults reproduce the standard schedule", () => {
+  const d = S.defaultsForWeek("2026-09-21");
+  assert.equal(S.weekdayName(d.publicationDate), "Monday");
+  assert.equal(S.weekdayName(d.deadlineDate), "Tuesday");
+  const edition = S.resolveEdition(d);
+  assert.equal(edition.id, "2026-09-21");
+  assert.equal(edition.publicationAt, "2026-09-21T12:00:00");
+  assert.equal(edition.deadlineAt, "2026-09-15T12:00:00");
+  assert.equal(edition.shifted, false);
+});
+
+test("overriding publication models a shifted week without changing the edition", () => {
+  // What the Advanced panel is for: Labor Day week publishes on the Tuesday.
+  const d = S.defaultsForWeek("2026-09-07");
+  const shifted = S.resolveEdition(Object.assign({}, d, { publicationDate: "2026-09-08" }));
+  assert.equal(shifted.id, "2026-09-07", "still anchored to the week");
+  assert.equal(shifted.shifted, true);
+  assert.equal(shifted.coverageStart, "2026-09-08T00:00:00");
+  assert.equal(shifted.coverageEnd, "2026-09-13T23:59:59");
+  assert.equal(shifted.deadlineAt, "2026-09-01T12:00:00", "deadline is untouched");
+});
+
+test("defaultsForWeek rejects a malformed date rather than guessing", () => {
+  assert.throws(() => S.defaultsForWeek("not-a-date"), /YYYY-MM-DD/);
 });
