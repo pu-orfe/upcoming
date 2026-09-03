@@ -180,6 +180,25 @@
     return name || detail || "";
   }
 
+  /** Describe a feed that is already narrowed to a single newsletter edition.
+   *
+   * events-newsletter.json is a pre-filtered snapshot: every record carries the
+   * same `newsletterEdition`. Filtering it by a *different* edition's window
+   * correctly yields nothing, which reads like "no events are scheduled" unless
+   * the caller says otherwise.
+   */
+  function feedScope(events) {
+    const list = events || [];
+    if (!list.length) return { prescoped: false, edition: null };
+    const editions = new Set();
+    for (const event of list) {
+      if (!event || !event.newsletterEdition) return { prescoped: false, edition: null };
+      editions.add(event.newsletterEdition);
+    }
+    if (editions.size !== 1) return { prescoped: false, edition: null };
+    return { prescoped: true, edition: editions.values().next().value };
+  }
+
   /** Split a feed into what WordPress would ingest for this edition, and what it would not. */
   function partition(events, edition) {
     const included = [];
@@ -225,6 +244,7 @@
     formatLocation: formatLocation,
     decorate: decorate,
     partition: partition,
+    feedScope: feedScope,
   };
 });
 
@@ -299,9 +319,11 @@
     const excludedCountEl = $("nfs-excluded-count");
     const excludedRowsEl = $("nfs-excluded-rows");
     const jsonEl = $("nfs-json");
+    const noticeEl = $("nfs-notice");
 
     let feed = null;
     let feedUrl = null;
+    let scope = { prescoped: false, edition: null };
     // The user may set a deadline by hand; stop re-deriving it once they do.
     let deadlinePinned = false;
 
@@ -378,6 +400,7 @@
       const url = sourceEl.value;
       feedUrl = url;
       feed = null;
+      scope = { prescoped: false, edition: null };
       setStatus("Loading " + url + "…");
       try {
         const response = await fetch(url, { cache: "no-store" });
@@ -385,6 +408,7 @@
         const data = await response.json();
         if (!Array.isArray(data)) throw new Error("expected a JSON array of events");
         feed = data;
+        scope = S.feedScope(data);
         setStatus("");
       } catch (err) {
         resultsEl.hidden = true;
@@ -431,6 +455,13 @@
 
       resultsEl.hidden = false;
       syncQueryState();
+
+      // The commonest way to get a confusing empty result: the newsletter variant
+      // is selected, which only ever holds one edition, and the dates describe a
+      // different one. Say that plainly instead of showing a bare empty table.
+      const mismatched = scope.prescoped && scope.edition !== edition.id;
+      renderScopeNotice(mismatched ? scope.edition : null, edition, result);
+
       const notes = [];
       if (result.malformed.length) {
         notes.push(
@@ -445,6 +476,29 @@
         );
       }
       setStatus(notes.length ? "Note: " + notes.join("; ") + "." : "", notes.length ? "warn" : null);
+    }
+
+    function renderScopeNotice(feedEdition, edition, result) {
+      noticeEl.replaceChildren();
+      noticeEl.hidden = feedEdition === null;
+      if (feedEdition === null) return;
+
+      noticeEl.appendChild(el("strong", null,
+        "This feed only contains edition " + feedEdition + "."));
+      noticeEl.appendChild(document.createTextNode(
+        " " + sourceEl.options[sourceEl.selectedIndex].text.replace(/\s+—.*$/, "") +
+        " is a pre-filtered snapshot of whichever edition was current when it was" +
+        " built, so it holds no events for edition " + edition.id +
+        (result.included.length ? "" : " — which is why the list below is empty") +
+        ". Switch to the full feed to explore any other edition."
+      ));
+      const button = el("button", "btn btn-primary", "Use the full feed");
+      button.type = "button";
+      button.addEventListener("click", function () {
+        sourceEl.selectedIndex = 0;
+        loadFeed();
+      });
+      noticeEl.appendChild(button);
     }
 
     function renderSummary(edition, result, phase, hoursToDeadline) {
@@ -489,8 +543,12 @@
       if (!result.included.length) {
         const row = document.createElement("tr");
         const cell = el("td", "nfs-empty",
-          "No events fall inside this coverage window. On a normal teaching week that " +
-          "usually means the window is wrong rather than the calendar being empty.");
+          scope.prescoped
+            ? "No events fall inside this coverage window, because this feed only " +
+              "holds edition " + scope.edition + ". See the note above."
+            : "No events in the selected feed start inside this coverage window. " +
+              "On a normal teaching week that usually means the dates are wrong " +
+              "rather than the calendar being empty.");
         cell.colSpan = 5;
         row.appendChild(cell);
         rowsEl.appendChild(row);
@@ -574,18 +632,6 @@
     if (resetBtn) resetBtn.addEventListener("click", () => {
       applyDefaults(nextMonday(easternToday()));
       nowEl.value = easternNow();
-      labelWeekday(pubDateEl, "nfs-pubday");
-      labelWeekday(deadlineDateEl, "nfs-deadlineday");
-      render();
-    });
-
-    const laborBtn = $("nfs-labor");
-    if (laborBtn) laborBtn.addEventListener("click", () => {
-      // Labor Day week: publication slips to the Tuesday, coverage starts with it,
-      // but the edition id and the Sunday end stay put.
-      applyDefaults("2026-09-08");
-      deadlineDateEl.value = "2026-09-01";
-      nowEl.value = "2026-09-02T09:00";
       labelWeekday(pubDateEl, "nfs-pubday");
       labelWeekday(deadlineDateEl, "nfs-deadlineday");
       render();

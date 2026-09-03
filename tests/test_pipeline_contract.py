@@ -227,6 +227,24 @@ def test_referenced_assets_exist_in_the_repo():
         assert (SITE_DIR / asset).is_file(), f"site/{asset} is referenced but missing"
 
 
+def test_simulator_markup_has_no_hardcoded_date_presets():
+    """Dates are chosen with the pickers; a hardcoded preset would rot each year."""
+    for page in (SITE_DIR / "index.html", SITE_DIR / "dev" / "index.html"):
+        html = page.read_text(encoding="utf-8")
+        assert "nfs-labor" not in html, f"{page.name} still has the Labor Day preset"
+    js = (SITE_DIR / "feed-simulator.js").read_text(encoding="utf-8")
+    assert "nfs-labor" not in js
+
+
+def test_simulator_markup_has_the_scope_notice():
+    """Explains an empty result caused by a pre-scoped feed."""
+    for page in (SITE_DIR / "index.html", SITE_DIR / "dev" / "index.html"):
+        html = page.read_text(encoding="utf-8")
+        assert 'id="nfs-notice"' in html, f"{page.name} is missing the scope notice"
+    js = (SITE_DIR / "feed-simulator.js").read_text(encoding="utf-8")
+    assert "nfs-notice" in js and "feedScope" in js
+
+
 def test_simulator_asset_is_self_contained():
     """A strict-ish Pages deploy plus no bundler means no external imports."""
     js = (SITE_DIR / "feed-simulator.js").read_text(encoding="utf-8")
