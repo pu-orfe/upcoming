@@ -1,8 +1,8 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "$id": "https://github.com/princeton-orfe/orfe-upcoming/schema/events.schema.json",
-  "title": "ORFE Upcoming Events",
-  "description": "Schema for the JSON array produced by the transform/enrich pipeline.",
+  "$id": "https://github.com/princeton-orfe/orfe-upcoming/schema/events-newsletter.schema.json",
+  "title": "ORFE Upcoming Events (newsletter variant)",
+  "description": "Schema for events-newsletter.json: the subset of the feed falling inside the next newsletter edition's coverage window. A strict superset of events.schema.json -- it additionally requires title provenance and the edition stamp. Self-contained rather than $ref'ing the base schema, because tools/validate_json.py builds a bare Draft7Validator with no RefResolver.",
   "type": "array",
   "items": {
     "type": "object",
@@ -16,7 +16,10 @@
       "title",
       "cancelled",
       "bannerImage",
-      "itemType"
+      "itemType",
+      "titleSource",
+      "titleIsPlaceholder",
+      "newsletterEdition"
     ],
     "properties": {
       "guid": {
@@ -40,12 +43,25 @@
       },
       "location": {
         "type": "object",
-        "required": ["name", "id", "detail"],
+        "required": [
+          "name",
+          "id",
+          "detail"
+        ],
         "additionalProperties": false,
         "properties": {
-          "name": { "type": "string", "description": "Building or venue name." },
-          "id": { "type": "string", "description": "Reserved for future canonical location id (may be empty)." },
-          "detail": { "type": "string", "description": "Room or extra info (e.g., '101')." }
+          "name": {
+            "type": "string",
+            "description": "Building or venue name."
+          },
+          "id": {
+            "type": "string",
+            "description": "Reserved for future canonical location id (may be empty)."
+          },
+          "detail": {
+            "type": "string",
+            "description": "Room or extra info (e.g., '101')."
+          }
         }
       },
       "series": {
@@ -75,7 +91,9 @@
       },
       "itemType": {
         "type": "string",
-        "enum": ["advertisement"],
+        "enum": [
+          "advertisement"
+        ],
         "description": "Static item type placeholder."
       },
       "rawEventDetails": {
@@ -84,12 +102,23 @@
       },
       "titleSource": {
         "type": "string",
-        "enum": ["enriched", "ics", "fallback-speaker", "fallback-template", "fallback-series"],
+        "enum": [
+          "enriched",
+          "ics",
+          "fallback-speaker",
+          "fallback-template",
+          "fallback-series"
+        ],
         "description": "Where the title came from. 'enriched' (scraped subtitle) and 'ics' (supplied by the feed) are real titles; the 'fallback-*' values are synthesized by this pipeline."
       },
       "titleIsPlaceholder": {
         "type": "boolean",
         "description": "True when the title was synthesized because no real one was available yet. Editors should treat these as unpublishable."
+      },
+      "newsletterEdition": {
+        "type": "string",
+        "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+        "description": "Stable id of the edition this variant was built for: the week-anchor Monday, even when publication is shifted (e.g. Labor Day week)."
       }
     }
   }

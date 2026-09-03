@@ -6,3 +6,5 @@ arrow
 beautifulsoup4
 markdownify
 jsonschema
+PyYAML  # workflow-contract tests parse .github/workflows/*.yml
+tzdata  # zoneinfo fallback: Windows ships no IANA tz database, and slim base images may drop theirs

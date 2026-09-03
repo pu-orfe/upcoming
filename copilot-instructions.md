@@ -7,13 +7,17 @@
 - `pu-orfe/upcoming` is public so its release assets are directly shareable. Production refreshes run on a native every-30-minutes GitHub Actions schedule, a heartbeat workflow creates a tiny keepalive commit after 35 idle days so public-repo schedules do not age out, and the latest production payload is also deployed to GitHub Pages for `upcoming.orfe.princeton.edu/events.json`.
 
 ## Architecture Overview
-- `src/main.py`: CLI entry point. Fetches ICS (`fetch_ics`), instantiates `ics.Calendar`, calls `transform_calendar`, and writes JSON. Handles optional enrichment based on CLI flags/env vars.
+- `src/main.py`: CLI entry point. Fetches ICS (`fetch_ics`), instantiates `ics.Calendar`, calls `transform_calendar`, and writes JSON. Handles optional enrichment based on CLI flags/env vars, then optionally writes the newsletter variant (`_write_newsletter_variant`) after the primary output.
 - `src/transform.py`: Defines `TransformConfig` dataclass and transformation helpers. Maps ICS event fields to output keys, normalizes dates with `arrow`, shapes location data, and inserts configured placeholders/copies.
 - `src/enrich.py`: Networking + parsing layer for enrichment. Statically caches headers, applies optional Markdown conversion, and offers:
   - `enrich_titles`, `fill_title_fallback`
   - `enrich_content`
   - `enrich_raw_details`, `enrich_raw_extracts`, plus extraction helpers.
-- `tools/validate_json.py`: JSON Schema validator using `jsonschema.Draft7Validator`.
+- `src/placeholders.py`: shared title-provenance vocabulary (`TitleSource`, `is_missing_title`, `mark_title_source`). Imports nothing from the package, so both `transform` and `enrich` can depend on it without a cycle.
+- `src/newsletter.py`: newsletter publication schedule and coverage windows. **Stdlib-only on purpose** -- the `Check ICS change` step in `ics_to_json.yml` runs it before `pip install`. Do not add third-party imports here, `arrow` included.
+- `src/notify_missing_titles.py`: the deadline watch. Also stdlib-only; does its own GitHub HTTP via `urllib`, matching `verify_published_feed.py` / `mirror_release.py`.
+- `site/feed-simulator.js`: the landing pages' feed view simulator. Reimplements the coverage-window arithmetic in browser JS; keep it in step with `src/newsletter.py` (`tests/test_feed_simulator.py` cross-checks them). Compares feed timestamps as plain strings on purpose, so results do not depend on the viewer's timezone. Shared by both pages and copied to the Pages root by the composite action.
+- `tools/validate_json.py`: JSON Schema validator using `jsonschema.Draft7Validator`. Built with no `RefResolver`, so schemas must stay self-contained (no `$ref` across files).
 - `examples/`: Reference ICS and expected JSON snapshot used in regression tests.
 - Tests in `tests/` cover transformation, enrichment behaviors, and CLI flows (pytest + monkeypatch stubbing).
 
@@ -23,6 +27,10 @@
 - For new enrichment logic, reuse the existing `requests.get` pattern (headers, `DEFAULT_TIMEOUT`) and make it monkeypatch-friendly (no global session state).
 - Preserve JSON output formatting (indent=2). When writing files use UTF-8.
 - ICS transformation: respect `TransformConfig` knobs. If adding new config fields, update defaults, loaders, and extend tests.
+- Newsletter scheduling belongs in `newsletter_config.json`, never in code or in a cron expression. The deadline moves between semesters; a cron that encodes it would drift from the config invisibly.
+- Feed timestamps are naive local wall clock in `TARGET_TZ`. Lift them into an aware datetime with `newsletter.event_start_to_aware`; never strip tzinfo off a window bound, and never read a feed timestamp as UTC.
+- Tests must point at `tests/fixtures/newsletter_config.test.json`, never the live schedule.
+- Anything published under `pages/` needs a matching `--check` in `verify_published_feed.yml`; `tests/test_pipeline_contract.py` enforces this.
 - Keep fallback rules intact: `fill_title_fallback` only overwrite empty/`TBD` titles unless explicitly told and enforces the 128-char prefix cap.
 - Handle environment switches via small helpers (`enrichment_*_enabled`). Extend them if new flags are introduced to stay testable.
 

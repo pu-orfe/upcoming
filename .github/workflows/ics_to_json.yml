@@ -41,6 +41,8 @@ jobs:
       FALLBACK_PREPEND_TEXT: ${{ vars.FALLBACK_PREPEND_TEXT }}
       FALLBACK_INCLUDE_SPEAKER: ${{ vars.FALLBACK_INCLUDE_SPEAKER }}
       EXCLUDE_SERIES: ${{ vars.EXCLUDE_SERIES }}
+      NEWSLETTER_OUTPUT_FILE: events-newsletter.json
+      NEWSLETTER_CONFIG_FILE: newsletter_config.json
       FORCE_REBUILD: ${{ github.event.inputs.force }}
       # Logic for enrichment flag: always on for schedule, respects input for dispatch
       ENRICH_FLAG: ${{ (github.event_name == 'schedule' || github.event.inputs.enrich_titles == 'true') && '--enrich-titles' || '' }}
@@ -70,20 +72,44 @@ jobs:
           new_hash=$(sha256sum current.ics | cut -d ' ' -f1)
           echo "New ICS SHA256: $new_hash"
           
-          # For main branch, previous hash is always from the 'latest' release
-          prev_hash=$(gh release view latest --json body -q '.body' 2>/dev/null | grep -Eo 'ICS_SHA256:[0-9a-f]+' | cut -d: -f2 || echo "")
+          # The newsletter coverage window is time-driven, not ICS-driven: it moves
+          # every Monday whether or not upstream changed, and it moves again if an
+          # editor edits the schedule. Keying the skip gate on the ICS hash alone
+          # would leave events-newsletter.json on a stale edition through a quiet
+          # week, with no error anywhere. src/newsletter.py is stdlib-only, so the
+          # runner's python3 suffices here -- setup-python has not run yet.
+          cur_edition=$(python3 -m src.newsletter --print-edition-id 2>/dev/null || echo "")
+          cur_cfg=$(python3 -m src.newsletter --print-config-sha256 2>/dev/null || echo "")
+          if [ -z "$cur_edition" ] || [ -z "$cur_cfg" ]; then
+            echo "::error::could not resolve the newsletter edition; refusing to skip" >&2
+            exit 1
+          fi
+          echo "Newsletter edition: $cur_edition (config ${cur_cfg:0:12})"
+
+          # For main branch, previous state is always from the 'latest' release body
+          prev_body=$(gh release view latest --json body -q '.body' 2>/dev/null || echo "")
+          prev_hash=$(printf '%s' "$prev_body" | grep -Eo 'ICS_SHA256:[0-9a-f]+' | cut -d: -f2 || echo "")
+          prev_edition=$(printf '%s' "$prev_body" | grep -Eo 'NEWSLETTER_EDITION:[0-9-]+' | cut -d: -f2 || echo "")
+          prev_cfg=$(printf '%s' "$prev_body" | grep -Eo 'NEWSLETTER_CONFIG_SHA256:[0-9a-f]+' | cut -d: -f2 || echo "")
           echo "Previous ICS SHA256: ${prev_hash:-<none>}"
-          
+          echo "Previous newsletter edition: ${prev_edition:-<none>}"
+
           if [ "${FORCE_REBUILD:-false}" = "true" ]; then
             echo "Force rebuild requested." >> "$GITHUB_STEP_SUMMARY"
             echo "skip=false" >> "$GITHUB_OUTPUT"
-          elif [ "$new_hash" = "$prev_hash" ] && [ -n "$prev_hash" ]; then
-            echo "ICS unchanged; skipping generation." >> "$GITHUB_STEP_SUMMARY"
+          elif [ "$new_hash" = "$prev_hash" ] && [ -n "$prev_hash" ] \
+            && [ "$cur_edition" = "$prev_edition" ] && [ "$cur_cfg" = "$prev_cfg" ]; then
+            echo "ICS and newsletter edition unchanged; skipping generation." >> "$GITHUB_STEP_SUMMARY"
             echo "skip=true" >> "$GITHUB_OUTPUT"
           else
+            if [ "$new_hash" = "$prev_hash" ] && [ -n "$prev_hash" ]; then
+              echo "ICS unchanged but the newsletter edition or schedule rolled over (${prev_edition:-<none>} -> ${cur_edition}); rebuilding." >> "$GITHUB_STEP_SUMMARY"
+            fi
             echo "skip=false" >> "$GITHUB_OUTPUT"
           fi
           echo "hash=$new_hash" >> "$GITHUB_OUTPUT"
+          echo "edition=$cur_edition" >> "$GITHUB_OUTPUT"
+          echo "config_sha=$cur_cfg" >> "$GITHUB_OUTPUT"
 
       - name: Set up Python
         if: steps.check_change.outputs.skip != 'true'
@@ -100,12 +126,22 @@ jobs:
       - name: Generate JSON
         if: steps.check_change.outputs.skip != 'true'
         run: |
-          python -m src.main --ics-url "${ICS_URL}" --repo-variable "${REPO_VARIABLE}" --output "${OUTPUT_FILE:-events.json}" ${ENRICH_FLAG} ${RAW_DETAILS_FLAG} ${EXTRACT_FLAGS}
+          python -m src.main --ics-url "${ICS_URL}" --repo-variable "${REPO_VARIABLE}" \
+            --output "${OUTPUT_FILE:-events.json}" \
+            --newsletter-output "${NEWSLETTER_OUTPUT_FILE}" \
+            --newsletter-config "${NEWSLETTER_CONFIG_FILE}" \
+            --newsletter-edition-output newsletter-edition.json \
+            ${ENRICH_FLAG} ${RAW_DETAILS_FLAG} ${EXTRACT_FLAGS}
 
       - name: Validate JSON against schema
         if: steps.check_change.outputs.skip != 'true'
         run: |
           python tools/validate_json.py --schema schema/events.schema.json --data "${OUTPUT_FILE:-events.json}"
+
+      - name: Validate newsletter variant against schema
+        if: steps.check_change.outputs.skip != 'true'
+        run: |
+          python tools/validate_json.py --schema schema/events-newsletter.schema.json --data "${NEWSLETTER_OUTPUT_FILE}"
 
       - name: Publish "latest" releases
         if: steps.check_change.outputs.skip != 'true'
@@ -114,15 +150,17 @@ jobs:
         run: |
           set -euo pipefail
           OUTPUT_ASSET="${OUTPUT_FILE:-events.json}"
+          NEWSLETTER_ASSET="${NEWSLETTER_OUTPUT_FILE}"
           TAG="latest"
           TITLE="Latest Events"
-          BODY="Automated update of events feed. ICS_SHA256:${{ steps.check_change.outputs.hash }}"
+          BODY="Automated update of events feed. ICS_SHA256:${{ steps.check_change.outputs.hash }} NEWSLETTER_EDITION:${{ steps.check_change.outputs.edition }} NEWSLETTER_CONFIG_SHA256:${{ steps.check_change.outputs.config_sha }}"
 
           # Overwrite existing 'latest' release
           gh release delete "$TAG" -y 2>/dev/null || true
-          gh release create "$TAG" "$OUTPUT_ASSET" --title "$TITLE" --notes "$BODY" --latest
+          gh release create "$TAG" "$OUTPUT_ASSET" "$NEWSLETTER_ASSET" --title "$TITLE" --notes "$BODY" --latest
 
           echo "Canonical asset URL: https://github.com/${GITHUB_REPOSITORY}/releases/download/${TAG}/${OUTPUT_ASSET}" >> "$GITHUB_STEP_SUMMARY"
+          echo "Newsletter asset URL: https://github.com/${GITHUB_REPOSITORY}/releases/download/${TAG}/${NEWSLETTER_ASSET}" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Prepare and upload Pages artifact
         if: steps.check_change.outputs.skip != 'true'
@@ -131,6 +169,7 @@ jobs:
           cname: ${{ env.PAGES_CNAME }}
           prod-events-source: local
           prod-events-file: ${{ env.OUTPUT_FILE || 'events.json' }}
+          prod-events-newsletter-file: ${{ env.NEWSLETTER_OUTPUT_FILE }}
           dev-events-source: release
           github-token: ${{ secrets.GITHUB_TOKEN }}
 
@@ -139,7 +178,10 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: events-json
-          path: ${{ env.OUTPUT_FILE || 'events.json' }}
+          path: |
+            ${{ env.OUTPUT_FILE || 'events.json' }}
+            ${{ env.NEWSLETTER_OUTPUT_FILE }}
+            newsletter-edition.json
 
       - name: Handle success/failure streak
         if: always() # This step runs regardless of job status

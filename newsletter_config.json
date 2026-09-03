@@ -1,0 +1,27 @@
+{
+  "_comment": "Live ORFE newsletter schedule. Publishes Mondays at noon; submission deadline is the preceding Tuesday at noon; an edition covers publication day through that week's Sunday. Add a Labor Day exception each year, and blackouts for recess weeks. See newsletter_config.example.json for the full set of knobs.",
+
+  "timezone": "America/New_York",
+
+  "defaults": {
+    "label": "standard",
+    "publication": { "weekday": "MON", "time": "12:00:00" },
+    "deadline":    { "anchor": "week_start", "offset_days": -6, "time": "12:00:00" },
+    "coverage": {
+      "start": { "anchor": "publication", "offset_days": 0, "time": "00:00:00" },
+      "end":   { "anchor": "week_start",  "offset_days": 6, "time": "23:59:59" }
+    },
+    "reminders": { "lead_hours": [72, 48, 24, 4] }
+  },
+
+  "schedules": [],
+
+  "exceptions": [
+    { "week_of": "2026-09-07", "publication_date": "2026-09-08", "reason": "Labor Day" },
+    { "week_of": "2027-09-06", "publication_date": "2027-09-07", "reason": "Labor Day" }
+  ],
+
+  "blackouts": [],
+
+  "max_weeks_lookahead": 60
+}

@@ -42,6 +42,8 @@ jobs:
       REPO_VARIABLE: ${{ vars.REPO_VARIABLE }}
       OUTPUT_FILE: ${{ vars.OUTPUT_FILE }}
       NOFPO_OUTPUT_FILE: events-nofpo.json
+      NEWSLETTER_OUTPUT_FILE: events-newsletter.json
+      NEWSLETTER_CONFIG_FILE: newsletter_config.json
       FALLBACK_INCLUDE_SPEAKER: ${{ vars.FALLBACK_INCLUDE_SPEAKER }}
       FALLBACK_PREPEND_TEXT: ${{ vars.FALLBACK_PREPEND_TEXT }}
       FORCE_REBUILD: ${{ github.event.inputs.force }}
@@ -103,7 +105,11 @@ jobs:
       - name: Generate JSON (Dev)
         if: steps.check_change.outputs.skip != 'true'
         run: |
-          python -m src.main --ics-url "${ICS_URL}" --repo-variable "${REPO_VARIABLE}" --output "${OUTPUT_FILE:-events.json}" ${ENRICH_FLAG} ${RAW_FLAGS} ${EXTRACT_FLAGS}
+          python -m src.main --ics-url "${ICS_URL}" --repo-variable "${REPO_VARIABLE}" \
+            --output "${OUTPUT_FILE:-events.json}" \
+            --newsletter-output "${NEWSLETTER_OUTPUT_FILE}" \
+            --newsletter-config "${NEWSLETTER_CONFIG_FILE}" \
+            ${ENRICH_FLAG} ${RAW_FLAGS} ${EXTRACT_FLAGS}
 
       - name: Generate JSON excluding FPO series
         if: steps.check_change.outputs.skip != 'true'
@@ -120,6 +126,11 @@ jobs:
         run: |
           python tools/validate_json.py --schema schema/events.schema.json --data "${NOFPO_OUTPUT_FILE:-events-nofpo.json}"
 
+      - name: Validate newsletter variant against schema
+        if: steps.check_change.outputs.skip != 'true'
+        run: |
+          python tools/validate_json.py --schema schema/events-newsletter.schema.json --data "${NEWSLETTER_OUTPUT_FILE}"
+
       - name: Publish "dev" releases
         if: steps.check_change.outputs.skip != 'true'
         env:
@@ -128,18 +139,21 @@ jobs:
           set -euo pipefail
           OUTPUT_ASSET="${OUTPUT_FILE:-events.json}"
           OUTPUT_NOFPO="${NOFPO_OUTPUT_FILE:-events-nofpo.json}"
+          OUTPUT_NEWSLETTER="${NEWSLETTER_OUTPUT_FILE:-events-newsletter.json}"
+          NEWSLETTER_EDITION=$(python3 -m src.newsletter --print-edition-id 2>/dev/null || echo "unknown")
           TAG="dev"
           TITLE="Development Events"
           SOURCE_REF="${GITHUB_REF_NAME}"
           SOURCE_SHA="${GITHUB_SHA}"
-          BODY="Development build of events feed from ${SOURCE_REF} (${SOURCE_SHA}). Includes filtered variant without FPO series. ICS_SHA256:${{ steps.check_change.outputs.hash }}"
+          BODY="Development build of events feed from ${SOURCE_REF} (${SOURCE_SHA}). Includes filtered variant without FPO series. ICS_SHA256:${{ steps.check_change.outputs.hash }} NEWSLETTER_EDITION:${NEWSLETTER_EDITION}"
 
           # Overwrite existing 'dev' release
           gh release delete "$TAG" -y 2>/dev/null || true
-          gh release create "$TAG" "$OUTPUT_ASSET" "$OUTPUT_NOFPO" --title "$TITLE" --notes "$BODY" --latest=false --target "${SOURCE_SHA}"
+          gh release create "$TAG" "$OUTPUT_ASSET" "$OUTPUT_NOFPO" "$OUTPUT_NEWSLETTER" --title "$TITLE" --notes "$BODY" --latest=false --target "${SOURCE_SHA}"
 
           echo "Canonical dev asset URL: https://github.com/${GITHUB_REPOSITORY}/releases/download/dev/${OUTPUT_ASSET}" >> "$GITHUB_STEP_SUMMARY"
           echo "Canonical dev asset (no FPO) URL: https://github.com/${GITHUB_REPOSITORY}/releases/download/dev/${OUTPUT_NOFPO}" >> "$GITHUB_STEP_SUMMARY"
+          echo "Canonical dev newsletter URL: https://github.com/${GITHUB_REPOSITORY}/releases/download/dev/${OUTPUT_NEWSLETTER}" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Prepare and upload Pages artifact
         if: steps.check_change.outputs.skip != 'true'
@@ -150,6 +164,7 @@ jobs:
           dev-events-source: local
           dev-events-file: ${{ env.OUTPUT_FILE || 'events.json' }}
           dev-events-nofpo-file: ${{ env.NOFPO_OUTPUT_FILE || 'events-nofpo.json' }}
+          dev-events-newsletter-file: ${{ env.NEWSLETTER_OUTPUT_FILE }}
           github-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Upload JSON artifact (Dev)
@@ -160,6 +175,7 @@ jobs:
           path: |
             ${{ env.OUTPUT_FILE || 'events.json' }}
             ${{ env.NOFPO_OUTPUT_FILE || 'events-nofpo.json' }}
+            ${{ env.NEWSLETTER_OUTPUT_FILE }}
 
       - name: Handle success/failure streak
         if: always()

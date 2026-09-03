@@ -1,0 +1,37 @@
+{
+  "_comment": "Template for newsletter_config.json. Weekdays are MON..SUN (or 0=Monday..6=Sunday); times are HH:MM or HH:MM:SS in the timezone below. Each bound is anchored to either the week-start Monday or the (possibly shifted) publication date.",
+
+  "timezone": "America/New_York",
+
+  "defaults": {
+    "label": "standard",
+    "publication": { "weekday": "MON", "time": "12:00:00" },
+    "deadline":    { "anchor": "week_start", "offset_days": -6, "time": "12:00:00" },
+    "coverage": {
+      "start": { "anchor": "publication", "offset_days": 0, "time": "00:00:00" },
+      "end":   { "anchor": "week_start",  "offset_days": 6, "time": "23:59:59" }
+    },
+    "reminders": { "lead_hours": [72, 48, 24, 4] }
+  },
+
+  "schedules": [
+    {
+      "label": "spring-2027",
+      "effective_from": "2027-01-25",
+      "effective_to": "2027-05-17",
+      "deadline": { "anchor": "week_start", "offset_days": -4, "time": "17:00:00" },
+      "reminders": { "lead_hours": [48, 12] }
+    }
+  ],
+
+  "exceptions": [
+    { "week_of": "2026-09-07", "publication_date": "2026-09-08", "reason": "Labor Day" }
+  ],
+
+  "blackouts": [
+    { "start": "2026-12-21", "end": "2027-01-11", "reason": "Winter recess" },
+    { "week_of": "2027-03-15", "reason": "Spring break" }
+  ],
+
+  "max_weeks_lookahead": 60
+}

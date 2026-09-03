@@ -106,6 +106,158 @@
       padding: 0.1rem 0.3rem;
       border-radius: 0.25rem;
     }
+    /* Feed view simulator. Scoped to #feed-simulator and built on the page tokens above. */
+    #feed-simulator .nfs-controls {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(13rem, 1fr));
+      gap: 1rem 1.25rem;
+      margin: 1.5rem 0;
+      align-items: start;
+    }
+    #feed-simulator .nfs-field { display: flex; flex-direction: column; gap: 0.35rem; min-width: 0; }
+    #feed-simulator .nfs-field label { font-weight: 700; font-size: 0.85rem; color: var(--ink-dark); }
+    #feed-simulator .nfs-field input,
+    #feed-simulator .nfs-field select {
+      font: inherit;
+      font-size: 0.95rem;
+      padding: 0.45rem 0.55rem;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      background: var(--white);
+      color: inherit;
+      min-width: 0;
+      width: 100%;
+    }
+    #feed-simulator .nfs-field input:invalid { border-color: #b3261e; }
+    #feed-simulator .nfs-hint {
+      margin: 0;
+      font-size: 0.78rem;
+      color: var(--muted);
+      line-height: 1.35;
+    }
+    #feed-simulator .nfs-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+      align-self: end;
+    }
+    #feed-simulator .nfs-actions .btn { font-size: 0.85rem; padding: 0.45rem 0.8rem; cursor: pointer; }
+
+    #feed-simulator .nfs-status { margin: 1rem 0; font-size: 0.92rem; }
+    #feed-simulator .nfs-status[data-tone="error"] { color: #b3261e; font-weight: 600; }
+    #feed-simulator .nfs-status[data-tone="warn"] { color: #8a5300; }
+
+    #feed-simulator .nfs-summary {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr));
+      gap: 0.85rem 1.25rem;
+      margin: 1.25rem 0 1.75rem;
+      padding: 1rem 1.15rem;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      background: var(--white);
+    }
+    #feed-simulator .nfs-summary > div { min-width: 0; }
+    #feed-simulator .nfs-summary dt {
+      font-size: 0.72rem;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--muted);
+      margin-bottom: 0.2rem;
+    }
+    #feed-simulator .nfs-summary dd {
+      margin: 0;
+      font-size: 0.95rem;
+      font-weight: 600;
+      overflow-wrap: anywhere;
+    }
+
+    #feed-simulator .nfs-pill {
+      display: inline-block;
+      font-size: 0.7rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      padding: 0.15rem 0.45rem;
+      border-radius: 999px;
+      white-space: nowrap;
+    }
+    #feed-simulator .nfs-pill[data-tone="open"]      { background: #d8f2dd; color: #14532d; }
+    #feed-simulator .nfs-pill[data-tone="closed"]    { background: #fdecc8; color: #7a4b00; }
+    #feed-simulator .nfs-pill[data-tone="published"] { background: #dbe6fb; color: #1c3d7a; }
+    #feed-simulator .nfs-pill[data-tone="bad"]       { background: #fadcd9; color: #8c1d18; }
+    #feed-simulator .nfs-pill[data-tone="good"]      { background: #d8f2dd; color: #14532d; }
+    #feed-simulator .nfs-pill[data-tone="muted"]     { background: var(--brand-light); color: var(--brand-dark); }
+
+    #feed-simulator .nfs-tablewrap { overflow-x: auto; margin: 0 0 1rem; }
+    #feed-simulator .nfs-table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
+    #feed-simulator .nfs-table caption {
+      caption-side: top;
+      text-align: left;
+      padding-bottom: 0.6rem;
+      font-size: 0.95rem;
+    }
+    #feed-simulator .nfs-table th,
+    #feed-simulator .nfs-table td {
+      text-align: left;
+      padding: 0.55rem 0.7rem;
+      border-bottom: 1px solid var(--line);
+      vertical-align: top;
+    }
+    #feed-simulator .nfs-table th { font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); }
+    #feed-simulator .nfs-table tbody tr[data-placeholder="true"] { background: rgba(250, 220, 217, 0.35); }
+    #feed-simulator .nfs-table .nfs-when { white-space: nowrap; font-variant-numeric: tabular-nums; }
+    #feed-simulator .nfs-table .nfs-title { font-weight: 600; }
+    #feed-simulator .nfs-table .nfs-note { display: block; font-weight: 400; font-size: 0.78rem; color: var(--muted); margin-top: 0.2rem; }
+    #feed-simulator .nfs-empty { padding: 1rem 0; color: var(--muted); }
+
+    #feed-simulator .nfs-details { margin: 0.75rem 0; }
+    #feed-simulator .nfs-details summary { cursor: pointer; font-size: 0.9rem; padding: 0.35rem 0; }
+    #feed-simulator .nfs-json {
+      max-height: 22rem;
+      overflow: auto;
+      padding: 0.9rem;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--surface);
+      font-size: 0.8rem;
+      line-height: 1.45;
+    }
+    #feed-simulator .btn-outline {
+      background: var(--white);
+      color: var(--brand-dark);
+      border-color: var(--line);
+    }
+    #feed-simulator .btn-outline:hover { border-color: var(--brand); color: var(--brand); }
+    #feed-simulator.sim-block { margin-top: 3rem; }
+    #feed-simulator .nfs-table tbody tr:last-child td { border-bottom: none; }
+
+    /* The dev page carries a smaller stylesheet than the production one, so the
+       few layout classes the simulator borrows are defined here rather than
+       duplicating the whole design system. */
+    #feed-simulator.sim-block { margin-top: 2.5rem; }
+    #feed-simulator .section-head {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 1rem;
+      border-bottom: 3px solid var(--brand);
+      padding-bottom: 0.5rem;
+      margin-bottom: 1.25rem;
+    }
+    #feed-simulator .section-head h2 { margin: 0; font-size: 1.6rem; color: var(--ink-dark); }
+    #feed-simulator .lede { margin: 0 0 1.5rem; max-width: 56rem; color: var(--muted); }
+    #feed-simulator .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      padding: 0.45rem 0.8rem;
+      border: 1px solid transparent;
+      text-decoration: none;
+      font-weight: 700;
+      cursor: pointer;
+    }
+    #feed-simulator .btn-primary { background: var(--brand); color: var(--ink-dark); }
   </style>
 </head>
 <body>
@@ -133,14 +285,131 @@
         </li>
         <li>
           <article class="card">
+            <p class="meta">Development &middot; newsletter</p>
+            <h2><a href="./events-newsletter.json">events-newsletter.json</a></h2>
+            <p>Only the events inside the next newsletter edition&rsquo;s coverage window, each flagged with <code>titleIsPlaceholder</code> and stamped with <code>newsletterEdition</code>.</p>
+          </article>
+        </li>
+        <li>
+          <article class="card">
             <p class="meta">Static fixture</p>
             <h2><a href="./test.json">test.json</a></h2>
             <p>A realistic dummy payload for remote ingest testing when you need stable sample data.</p>
           </article>
         </li>
       </ul>
+    </div>
+
+    <div class="container sim-block" id="feed-simulator">
+      <div class="section-head">
+        <h2>Feed view simulator</h2>
+        <a href="../#feed-simulator">Production simulator</a>
+      </div>
+      <p class="lede">
+        Pick a publication date and a submission deadline to see exactly which events the
+        editorial system would ingest for that edition &mdash; and which of them still carry a
+        title this pipeline synthesised rather than one a speaker supplied. Everything runs in
+        your browser against the live feed; nothing is sent anywhere and nothing is changed.
+      </p>
+
+      <form class="nfs-controls" id="nfs-form" novalidate>
+        <div class="nfs-field">
+          <label for="nfs-source">Feed</label>
+          <select id="nfs-source">
+            <option value="./events.json" selected>Dev feed &mdash; events.json</option>
+            <option value="./events-newsletter.json">Dev newsletter variant &mdash; events-newsletter.json</option>
+            <option value="./events-nofpo.json">Dev feed without FPO &mdash; events-nofpo.json</option>
+            <option value="./test.json">Static fixture &mdash; test.json</option>
+          </select>
+          <p class="nfs-hint">Dev assets are republished only when the development workflow is dispatched.</p>
+        </div>
+
+        <div class="nfs-field">
+          <label for="nfs-pubdate">Publication date</label>
+          <input type="date" id="nfs-pubdate" required>
+          <p class="nfs-hint" id="nfs-pubday">&nbsp;</p>
+        </div>
+
+        <div class="nfs-field">
+          <label for="nfs-pubtime">Publication time</label>
+          <input type="time" id="nfs-pubtime" value="12:00" step="60" required>
+          <p class="nfs-hint">Eastern, as published.</p>
+        </div>
+
+        <div class="nfs-field">
+          <label for="nfs-deadlinedate">Deadline date</label>
+          <input type="date" id="nfs-deadlinedate" required>
+          <p class="nfs-hint" id="nfs-deadlineday">&nbsp;</p>
+        </div>
+
+        <div class="nfs-field">
+          <label for="nfs-deadlinetime">Deadline time</label>
+          <input type="time" id="nfs-deadlinetime" value="12:00" step="60" required>
+          <p class="nfs-hint">Eastern. Late additions go to the editor by email.</p>
+        </div>
+
+        <div class="nfs-field">
+          <label for="nfs-now">Viewing as of</label>
+          <input type="datetime-local" id="nfs-now" step="60">
+          <p class="nfs-hint">Optional. Sets whether the edition reads as open, closed or published.</p>
+        </div>
+
+        <div class="nfs-actions">
+          <button type="button" class="btn btn-primary" id="nfs-reset">Next Monday</button>
+          <button type="button" class="btn btn-outline" id="nfs-labor">Labor Day week</button>
+        </div>
+      </form>
+
+      <p class="nfs-status" id="nfs-status" role="status" aria-live="polite">Loading the feed&hellip;</p>
+
+      <div id="nfs-results" hidden>
+        <dl class="nfs-summary" id="nfs-summary"></dl>
+
+        <div class="nfs-tablewrap">
+          <table class="nfs-table">
+            <caption id="nfs-caption"></caption>
+            <thead>
+              <tr>
+                <th scope="col">Starts</th>
+                <th scope="col">Title the editors would see</th>
+                <th scope="col">Series</th>
+                <th scope="col">Speaker</th>
+                <th scope="col">Location</th>
+              </tr>
+            </thead>
+            <tbody id="nfs-rows"></tbody>
+          </table>
+        </div>
+
+        <details class="nfs-details" id="nfs-excluded-wrap">
+          <summary><span id="nfs-excluded-count"></span></summary>
+          <div class="nfs-tablewrap">
+            <table class="nfs-table">
+              <thead>
+                <tr>
+                  <th scope="col">Starts</th>
+                  <th scope="col">Title</th>
+                  <th scope="col">Series</th>
+                  <th scope="col">Why it is out</th>
+                </tr>
+              </thead>
+              <tbody id="nfs-excluded-rows"></tbody>
+            </table>
+          </div>
+        </details>
+
+        <details class="nfs-details">
+          <summary>What the editorial system receives for this edition (JSON)</summary>
+          <pre class="nfs-json" id="nfs-json"></pre>
+        </details>
+      </div>
+    </div>
+
+    <div class="container">
       <a class="back-link" href="../">← Back to the main page</a>
     </div>
   </main>
+
+  <script src="../feed-simulator.js" defer></script>
 </body>
 </html>
