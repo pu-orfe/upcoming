@@ -239,6 +239,53 @@ def test_main_pipeline_gives_every_event_provenance(tmp_path, capsys):
         assert isinstance(ev["titleIsPlaceholder"], bool)
 
 
+def test_main_pipeline_with_title_enrichment_marks_enriched(tmp_path, capsys, monkeypatch):
+    """Exercises main() with --enrich-titles, which is what production CI runs.
+
+    Regression: mark_prov was resolved *after* the enrich_titles call that consumed
+    it, so every enriched production run died with UnboundLocalError while the
+    un-enriched test path stayed green.
+    """
+    def fake_get(url, timeout=15, headers=None):  # noqa: ARG001
+        return DummyResp(
+            '<html><body><div class="event-subtitle">A Real Scraped Title</div></body></html>'
+        )
+
+    monkeypatch.setattr("src.enrich.requests.get", fake_get)
+    out = tmp_path / "events.json"
+    rc = main_mod.main([
+        "--ics-url", str(SAMPLE_ICS), "--output", str(out), "--enrich-titles",
+    ])
+    captured = capsys.readouterr()
+    assert rc == 0, captured.err
+    data = json.loads(out.read_text())
+    assert len(data) == 14
+    enriched = [ev for ev in data if ev["titleSource"] == "enriched"]
+    assert len(enriched) == 14, "every event has a urlRef, so all should enrich"
+    assert all(ev["title"] == "A Real Scraped Title" for ev in enriched)
+    assert all(ev["titleIsPlaceholder"] is False for ev in enriched)
+
+
+def test_main_pipeline_with_enrichment_and_provenance_disabled(tmp_path, capsys, monkeypatch):
+    """The --no-title-provenance path must also survive the enrichment branch."""
+    def fake_get(url, timeout=15, headers=None):  # noqa: ARG001
+        return DummyResp(
+            '<html><body><div class="event-subtitle">A Real Scraped Title</div></body></html>'
+        )
+
+    monkeypatch.setattr("src.enrich.requests.get", fake_get)
+    out = tmp_path / "events.json"
+    rc = main_mod.main([
+        "--ics-url", str(SAMPLE_ICS), "--output", str(out),
+        "--enrich-titles", "--no-title-provenance",
+    ])
+    capsys.readouterr()
+    assert rc == 0
+    data = json.loads(out.read_text())
+    assert len(data) == 14
+    assert all("titleSource" not in ev for ev in data)
+
+
 def test_generate_events_json_emits_nonempty_titles_and_provenance(tmp_path):
     """Regression: generate_events_json used to emit "" titles, violating minLength: 1."""
     out = tmp_path / "events.json"
