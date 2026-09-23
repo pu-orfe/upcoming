@@ -21,7 +21,9 @@
     { "week_of": "2027-09-06", "publication_date": "2027-09-07", "reason": "Labor Day" }
   ],
 
-  "blackouts": [],
+  "blackouts": [
+    { "week_of": "2026-10-05", "reason": "No ORFE events scheduled" }
+  ],
 
   "max_weeks_lookahead": 60
 }
