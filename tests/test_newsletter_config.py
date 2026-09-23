@@ -5,6 +5,8 @@ from pathlib import Path
 
 import pytest
 
+from datetime import datetime, timedelta
+
 from src.newsletter import (
     Anchor,
     NewsletterConfigError,
@@ -12,6 +14,7 @@ from src.newsletter import (
     load_newsletter_config,
     parse_time,
     parse_weekday,
+    upcoming_edition,
 )
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -272,3 +275,43 @@ def test_rule_effective_to_expires_back_to_defaults(tmp_path, isolated_cwd):
     cfg = load_newsletter_config(path, env={})
     assert cfg.rule_for(date(2027, 3, 1)).label == "spring"
     assert cfg.rule_for(date(2027, 6, 7)).label == "default"
+
+
+# --------------------------------------------------------------------------
+# Blackouts in the live schedule
+# --------------------------------------------------------------------------
+
+def test_every_live_blackout_actually_suppresses_its_edition():
+    """A blackout that parses but does not take effect is the worst outcome.
+
+    The deadline watch exits 3 on an empty coverage window, deliberately, so a
+    recess week nobody declared turns into an hourly red run. Declaring one that
+    silently fails to apply looks like it was handled and behaves as if it was
+    not. This walks whatever is in the live config rather than pinning a date,
+    so it stays honest as the academic calendar moves.
+    """
+    cfg = load_newsletter_config(LIVE_CONFIG, env={})
+    if not cfg.blackouts:
+        pytest.skip("no blackouts configured in the live schedule")
+    tz = cfg.tzinfo()
+    for blackout in cfg.blackouts:
+        week = blackout.start
+        while week <= blackout.end:
+            assert cfg.is_blacked_out(week), f"{week} parses as a blackout but is not covered"
+            # Resolving from the Monday itself must land on a later edition.
+            resolved = upcoming_edition(cfg, datetime.combine(week, time(0, 1), tzinfo=tz))
+            assert resolved.week_start > blackout.end, (
+                f"blackout {blackout.start}..{blackout.end} did not suppress the "
+                f"{resolved.week_start} edition"
+            )
+            week += timedelta(days=7)
+
+
+def test_live_blackouts_are_week_start_mondays():
+    """`covers()` compares against a week-anchor Monday, so a mid-week date in a
+    blackout silently matches nothing."""
+    cfg = load_newsletter_config(LIVE_CONFIG, env={})
+    for blackout in cfg.blackouts:
+        assert blackout.start.weekday() == 0, f"{blackout.start} is not a Monday"
+        assert blackout.end.weekday() == 0, f"{blackout.end} is not a Monday"
+
